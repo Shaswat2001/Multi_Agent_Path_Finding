@@ -1,0 +1,28 @@
+<package format="3">
+  <name>marl_planner</name>
+  <version>0.0.0</version>
+  <description>
+    RL package that learns to control an aerial manipulator
+  </description>
+  <author>Shaswat Garg</author>
+  <maintainer email="sis_shaswat@outlook.com" />
+  <license>MIT</license>
+  
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>px4_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+  <exec_depend>ros2launch</exec_depend>
+</package>
