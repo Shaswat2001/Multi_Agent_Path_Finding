@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 class ReplayBuffer:
 
@@ -24,7 +25,14 @@ class ReplayBuffer:
     def shuffle(self):
         max_mem = min(self.mem_size, self.current_mem)
         index = np.random.choice(max_mem, self.batch_size)
-        return (self.state[index],self.action[index],self.reward[index],self.next_state[index],self.done[index])
+
+        state = torch.Tensor(self.state[index])
+        action = torch.Tensor(self.action[index])
+        reward = torch.Tensor(self.reward[index])
+        next_state = torch.Tensor(self.next_state[index])
+        done = torch.Tensor(self.done[index])
+
+        return (state,action,reward,next_state,done)
 
 class VisionReplayBuffer:
 

@@ -8,12 +8,13 @@ EPS = 1e-8
 PolicyOps = namedtuple('PolicyOps', 'raw_mean mean log_std pi log_prob_pi')
 
 def soft_update(target, source, tau):
+
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(
             target_param.data * (1.0 - tau) + param.data * tau
         )
 
-def hard_update(target, source):
+def hard_update(target,source):
     for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 

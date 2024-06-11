@@ -32,12 +32,8 @@ include_directories(include)
 
 install(PROGRAMS
   scripts/main.py
-  scripts/process_pcd.py
   scripts/test_env.py
-  scripts/compile_result.py
   scripts/create_rviz_world.py
-  scripts/px4_test.py
-  scripts/test_twin_uam.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

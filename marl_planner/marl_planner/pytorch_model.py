@@ -341,6 +341,43 @@ class PhasicQNetwork(nn.Module):
         Qval = self.QNet(ipt)
         return Qval
 
+class CentralizedQNetwork(nn.Module):
+
+    def __init__(self,input_shape,n_action,n_agents):
+        super(CentralizedQNetwork,self).__init__()
+
+        self.stateNet = nn.Sequential(
+            nn.Linear(input_shape*n_agents,1024),
+            nn.ReLU(),
+            nn.Linear(1024,512),
+            nn.ReLU(),
+            nn.Linear(512,256),
+            nn.ReLU(),
+            nn.Linear(256,128),
+            nn.ReLU(),
+        )
+
+        self.actionNet = nn.Sequential(
+            nn.Linear(n_action*n_agents,128),
+            nn.ReLU(),
+        )
+
+        self.QNet = nn.Sequential(
+            nn.Linear(256,512),
+            nn.ReLU(),
+            nn.Linear(512,512),
+            nn.ReLU(),
+            nn.Linear(512,1)
+        )
+
+    def forward(self,state,action):
+        
+        stateProcess = self.stateNet(state)
+        actionProcess = self.actionNet(action)
+        ipt = torch.cat((stateProcess,actionProcess),dim=1)
+        Qval = self.QNet(ipt)
+        return Qval
+
 class QNetwork(nn.Module):
 
     def __init__(self,input_shape,n_action):
@@ -517,89 +554,3 @@ class DQN(nn.Module):
         
         Qval = self.stateNet(state)
         return Qval
-    
-class FeatureExtractor(nn.Module):
-
-    def __init__(self,depth_input,rgb_input,prpt_input):
-
-        super(FeatureExtractor,self).__init__()
-
-        self.depthConv = nn.Sequential(
-                            nn.Conv2d(4, 16, kernel_size=3, stride=1, padding=1),
-                            nn.ReLU(inplace=True),
-                            nn.MaxPool2d(kernel_size=2,stride=2),
-                            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-                            nn.ReLU(inplace=True),
-                            nn.MaxPool2d(kernel_size=4,stride=4),
-                            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-                            nn.ReLU(inplace=True),
-                            nn.MaxPool2d(kernel_size=2,stride=2),
-                            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-                            nn.ReLU(inplace=True),
-                            nn.Flatten()
-                        )
-        
-        self.rgbConv = nn.Sequential(
-                        nn.Conv2d(12, 32, kernel_size=3, stride=1, padding=1),
-                        nn.ReLU(inplace=True),
-                        nn.MaxPool2d(kernel_size=2,stride=2),
-                        nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-                        nn.ReLU(inplace=True),
-                        nn.MaxPool2d(kernel_size=4,stride=4),
-                        nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
-                        nn.ReLU(inplace=True),
-                        nn.Flatten()
-                    )
-
-
-        self.prptNet = nn.Sequential(
-            nn.Linear(prpt_input,256),
-            nn.ReLU(),
-            nn.Linear(256,256)
-        )
-
-        self.transEncoder = TransformerEncoder(2,4352)
-
-        self.projectHead = nn.Sequential(
-            nn.Linear(4352,256),
-            nn.ReLU(),
-            nn.Linear(256,256)
-        )
-
-    def forward(self,vision_dpt,vision_rgb,proprioceptive):
-
-        depth_process = self.depthConv(vision_dpt)
-        rgb_process = self.rgbConv(vision_rgb)
-        depth_process = depth_process.view(depth_process.shape[0],-1)
-        rgb_process = rgb_process.view(rgb_process.shape[0],-1)
-
-        pprt_process = self.prptNet(proprioceptive)
-        data = torch.cat((pprt_process,rgb_process,depth_process),dim=-1)
-
-        transform_encd = self.transEncoder(data)
-        observation = self.projectHead(transform_encd)
-
-        return observation
-
-class TransformerEncoder(nn.Module):
-
-    def __init__(self,n_hidden,input_shape):
-        super(TransformerEncoder,self).__init__()
-
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_shape, nhead=n_hidden)
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=2)
-
-    def forward(self,observation):
-
-        return self.transformer_encoder(observation)
-
-
-if __name__ == "__main__":
-
-    rgb = torch.randn(2,12,64,64)
-    depth = torch.randn(2,4,64,64)
-    prp = torch.randn(2,34)
-
-    model = FeatureExtractor(0,0,34)
-    data = model(depth,rgb,prp)
-    print(data.shape)
