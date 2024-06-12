@@ -6,39 +6,60 @@ import argparse
 import sys
 import numpy as np
 import rclpy
+import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 
-from marl_planner.agent import MADDPG
-from marl_planner.pytorch_model import GaussianPolicyNetwork, PolicyNetwork,CentralizedQNetwork,QNetwork,VNetwork,PhasicPolicyNetwork,PhasicQNetwork,ConstraintNetwork,MultiplierNetwork,SafePolicyNetwork,RealNVP
+from marl_planner.agent import MADDPG, COMA
+from marl_planner.pytorch_model import PolicyNetwork,CentralizedQNetwork,QNetwork,VNetwork, DiscretePolicyNetwork, DiscreteQNetwork
 
 from pettingzoo.mpe import simple_spread_v3
 
-from marl_planner.replay_buffer.Uniform_RB import ReplayBuffer,VisionReplayBuffer
-from marl_planner.replay_buffer.Auxiliary_RB import AuxReplayBuffer
-from marl_planner.replay_buffer.Constraint_RB import ConstReplayBuffer,CostReplayBuffer
-
+from marl_planner.replay_buffer.Uniform_RB import ReplayBuffer, DiscreteReplayBuffer
 from marl_planner.exploration.OUActionNoise import OUActionNoise
+
+def get_parameters(args,env):
+
+    args.state_size = {}
+    args.input_shape = {}
+    args.n_actions = {}
+    args.max_action = {}
+    args.min_action = {}
+    args.env_agents = env.agents
+    args.n_agents = len(env.agents)
+    for agent in env.agents:
+        if args.is_continous:
+            args.state_size[agent] = env.observation_space(agent).shape[0]
+            args.input_shape[agent] = env.observation_space(agent).shape[0]
+            args.n_actions[agent] = env.action_space(agent).shape[0]
+            args.max_action[agent] = env.action_space(agent).high
+            args.min_action[agent] = env.action_space(agent).low
+        else:
+            args.state_size[agent] = env.observation_space(agent).shape[0]
+            args.input_shape[agent] = env.observation_space(agent).shape[0]
+            args.n_actions[agent] = env.action_space(agent).n
 
 def build_parse():
 
     parser = argparse.ArgumentParser(description="RL Algorithm Variables")
 
-    parser.add_argument("Environment",nargs="?",type=str,default="uam_gazebo",help="Name of OPEN AI environment")
+    parser.add_argument("Environment",nargs="?",type=str,default="simple_spread",help="Name of OPEN AI environment")
     parser.add_argument("input_shape",nargs="?",type=int,default=[],help="Shape of environment state")
     parser.add_argument("n_actions",nargs="?",type=int,default=[],help="shape of environment action")
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="MADDPG",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="COMA",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
     parser.add_argument('critic_lr',nargs="?",type=float,default=0.0001,help="Learning rate of the Q Network")
+    parser.add_argument('is_continous',nargs="?",type=bool,default=False,help="Action space is discrete or continous")
 
     parser.add_argument("mem_size",nargs="?",type=int,default=100000,help="Size of Replay Buffer")
     parser.add_argument("batch_size",nargs="?",type=int,default=64,help="Batch Size used during training")
     parser.add_argument("n_agents",nargs="?",type=int,default=2,help="Total number of agents in the environment")
+    parser.add_argument("env_agents",nargs="?",type=list,default=[],help="Name of environment agents")
     parser.add_argument("n_episodes",nargs="?",type=int,default=50000,help="Total number of episodes to train the agent")
     parser.add_argument("n_batches",nargs="?",type=int,default=10,help="Total number of times the RL needs to be replicated")
     parser.add_argument("target_update",nargs="?",type=int,default=2,help="Iterations to update the target network")
@@ -62,7 +83,15 @@ def build_parse():
 
     return args
 
-def train(args,env,trainer_dict):
+def get_numpy(values):
+
+    for agent in values.keys():
+
+        values[agent] = values[agent].detach().numpy()
+    
+    return values
+
+def train(args,env,trainer):
 
     best_reward = -np.inf
     total_reward = []
@@ -77,14 +106,15 @@ def train(args,env,trainer_dict):
         
         while True:
 
-            action = {agent:trainer_dict[agent].choose_action(observation[agent]) for agent in env.agents}
-            next_observation,rwd,termination,truncation,info = env.step(action)
+            action = trainer.choose_action(observation)
 
-            for key,trainer in trainer_dict.items():
-                trainer.add(observation[key],action[key],rwd[key],next_observation[key],termination[key])
+            numpy_action = get_numpy(copy.copy(action[0]))
+
+            next_observation,rwd,termination,truncation,info = env.step(numpy_action)
+
+            trainer.add(observation,action,rwd,next_observation,termination)
             
-            for trainer in trainer_dict.values():
-                trainer.learn(list(trainer_dict.values()))
+            trainer.learn()
 
             reward+=sum(list(rwd.values()))
 
@@ -100,8 +130,7 @@ def train(args,env,trainer_dict):
             best_reward=avg_reward
             if args.save_rl_weights:
                 print("Weights Saved !!!")
-                for trainer in trainer_dict.values():
-                    trainer.save(args.Environment)
+                trainer.save(args.Environment)
 
         print("Episode * {} * Avg Reward is ==> {}".format(i, avg_reward))
         avg_reward_list.append(avg_reward)
@@ -123,22 +152,15 @@ if __name__=="__main__":
     rclpy.init(args=None)
 
     args = build_parse()
-    trainer_dict = {}
 
-    env = simple_spread_v3.parallel_env(N=3, local_ratio=0.5, max_cycles=25, continuous_actions=True)
+    env = simple_spread_v3.parallel_env(N=3, local_ratio=0.5, max_cycles=25)
     env.reset()
 
-    args.n_agents = len(env.agents)
-    for an in range(len(env.agents)):
-        args.state_size = env.observation_space(env.agents[an]).shape[0]
-        args.input_shape = env.observation_space(env.agents[an]).shape[0]
-        args.n_actions = env.action_space(env.agents[an]).shape[0]
-        args.max_action = env.action_space(env.agents[an]).high
-        args.min_action = env.action_space(env.agents[an]).low
+    get_parameters(args,env)
     
-        if args.Algorithm == "MADDPG":
-            trainer = MADDPG.MADDPG(args = args,policy = PolicyNetwork,critic = CentralizedQNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise, agent_num=an)
-        
-        trainer_dict[env.agents[an]]  = trainer
+    if args.Algorithm == "MADDPG":
+        trainer = MADDPG.MADDPG(args = args,policy = PolicyNetwork,critic = CentralizedQNetwork,replayBuff = ReplayBuffer,exploration = OUActionNoise)
+    if args.Algorithm == "COMA":
+        trainer = COMA.COMA(args = args,policy = DiscretePolicyNetwork,critic = DiscreteQNetwork,replayBuff = DiscreteReplayBuffer)
 
-    train(args,env,trainer_dict)
+    train(args,env,trainer)
