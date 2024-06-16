@@ -1,22 +1,21 @@
 import numpy as np
 import torch
 import os
-from marl_planner.pytorch_utils import hard_update,soft_update
+from marl_planner.common.utils import hard_update,soft_update
+from marl_planner.network.attention_critic import AttentionCritic
+from marl_planner.common.replay_buffer import ReplayBuffer
+
 
 class MAAC:
     '''
     MAAC Algorithm 
     '''
-    def __init__(self,args,policy,critic,replayBuff,exploration,agent_num):
+    def __init__(self,args,policy):
 
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
         # Replay Buffer provided by the user
-        self.replayBuff = replayBuff
-        self.exploration = exploration
-        self.agent_num = agent_num
         self.policy = policy
-        self.critic = critic
 
         self.reset()
 
@@ -26,11 +25,8 @@ class MAAC:
         
         if stage == "training":
             action = self.PolicyNetwork(state).detach().numpy()
-            action += self.noiseOBJ()
         else:
             action = self.TargetPolicyNetwork(state).detach().numpy()
-
-        action = np.clip(action,self.args.min_action,self.args.max_action)
 
         return action
 
@@ -80,45 +76,54 @@ class MAAC:
         self.PolicyOptimizer.step()
 
         if self.learning_step%self.args.target_update == 0:                
-            soft_update(self.TargetPolicyNetwork,self.PolicyNetwork,self.args.tau)
-            soft_update(self.TargetQNetwork,self.Qnetwork,self.args.tau)
+            self.network_soft_updates()
 
     def add(self,s,action,rwd,next_state,done):
         self.replay_buffer.store(s,action,rwd,next_state,done)
 
     def reset(self):
 
-        self.replay_buffer = self.replayBuff(input_shape = self.args.state_size,mem_size = self.args.mem_size,n_actions = self.args.n_actions,batch_size = self.args.batch_size)
-        # Exploration Technique
-        self.noiseOBJ = self.exploration(mean=np.zeros(self.args.n_actions), std_deviation=float(0.04) * np.ones(self.args.n_actions))
-        
-        self.PolicyNetwork = self.policy(self.args.input_shape,self.args.n_actions,self.args.max_action)
-        self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=self.args.actor_lr)
-        self.TargetPolicyNetwork = self.policy(self.args.input_shape,self.args.n_actions,self.args.max_action)
+        self.replay_buffer = {agent:ReplayBuffer(self.args,agent) for agent in self.args.env_agents}
+                
+        self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents} 
+        self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
+        self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents} 
 
         self.Qnetwork = self.critic(self.args.input_shape,self.args.n_actions,self.args.n_agents) 
         self.QOptimizer = torch.optim.Adam(self.Qnetwork.parameters(),lr=self.args.critic_lr)
         self.TargetQNetwork = self.critic(self.args.input_shape,self.args.n_actions,self.args.n_agents) 
 
-        hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
+        self.network_hard_updates()
+    
+    def network_hard_updates(self):
+
         hard_update(self.TargetQNetwork,self.Qnetwork)
+        for agent in self.args.env_agents:
+            hard_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent])
+    
+    def network_soft_updates(self):
 
-    def return_actions(self,state):
-
-        return self.PolicyNetwork(state),self.TargetPolicyNetwork(state)
+        soft_update(self.TargetQNetwork,self.Qnetwork,self.args.tau)
+        for agent in self.args.env_agents:
+            soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)
     
     def save(self,env):
         print("-------SAVING NETWORK -------")
 
-        os.makedirs("config/saves/training_weights/"+ env + "/maddpg_weights", exist_ok=True)
-        torch.save(self.PolicyNetwork.state_dict(),"config/saves/training_weights/"+ env + "/maddpg_weights/actorWeights.pth")
-        torch.save(self.Qnetwork.state_dict(),"config/saves/training_weights/"+ env + "/maddpg_weights/QWeights.pth")
-        torch.save(self.TargetPolicyNetwork.state_dict(),"config/saves/training_weights/"+ env + "/maddpg_weights/TargetactorWeights.pth")
-        torch.save(self.TargetQNetwork.state_dict(),"config/saves/training_weights/"+ env + "/maddpg_weights/TargetQWeights.pth")
+        torch.save(self.Qnetwork.state_dict(),"config/saves/training_weights/"+ env + f"/maac_weights/{agent}/QWeights.pth")
+        torch.save(self.TargetQNetwork.state_dict(),"config/saves/training_weights/"+ env + f"/maac_weights/{agent}/TargetQWeights.pth")
+
+        for agent in self.args.env_agents:
+            os.makedirs("config/saves/training_weights/"+ env + f"/maac_weights/{agent}", exist_ok=True)
+            torch.save(self.PolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/maac_weights//{agent}/actorWeights.pth")
+            torch.save(self.TargetPolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/maac_weights/{agent}/TargetactorWeights.pth")
 
     def load(self,env):
+        
+        self.Qnetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/maac_weights/{agent}/QWeights.pth",map_location=torch.device('cpu')))
+        self.TargetQNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/maac_weights/{agent}/TargetQWeights.pth",map_location=torch.device('cpu')))
 
-        self.PolicyNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + "/maddpg_weights/actorWeights.pth",map_location=torch.device('cpu')))
-        self.Qnetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + "/maddpg_weights/QWeights.pth",map_location=torch.device('cpu')))
-        self.TargetPolicyNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + "/maddpg_weights/TargetactorWeights.pth",map_location=torch.device('cpu')))
-        self.TargetQNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + "/maddpg_weights/TargetQWeights.pth",map_location=torch.device('cpu')))
+        for agent in self.args.env_agents:
+            self.PolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/maac_weights//{agent}/actorWeights.pth",map_location=torch.device('cpu')))
+            self.TargetPolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/maac_weights/{agent}/TargetactorWeights.pth",map_location=torch.device('cpu')))
+        

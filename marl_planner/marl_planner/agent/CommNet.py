@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import os
-from marl_planner.pytorch_utils import hard_update,soft_update
+from marl_planner.common.utils import hard_update,soft_update
 from torch.distributions import Categorical
 
 class CommNet:
