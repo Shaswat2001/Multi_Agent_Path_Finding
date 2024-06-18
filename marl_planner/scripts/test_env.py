@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
 from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ
-from marl_planner.network.base_net import DiscreteMLP, SACDiscreteMLP, ContinuousMLP
+from marl_planner.network.base_net import DiscreteMLP, GaussianNet, ContinuousMLP
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
 def train(args,env,trainer):
@@ -53,10 +53,10 @@ if __name__=="__main__":
         trainer = COMA.COMA(args = args,policy = DiscreteMLP)
     elif args.Algorithm == "MAAC":
         args = get_coma_args(args)
-        trainer = MAAC.MAAC(args = args,policy = SACDiscreteMLP)
+        trainer = MAAC.MAAC(args = args,policy = GaussianNet)
     elif args.Algorithm == "QMIX":
         args = get_qmix_args(args)
-        trainer = QMIX.QMIX(args = args,policy = SACDiscreteMLP)
+        trainer = QMIX.QMIX(args = args,policy = GaussianNet)
     elif args.Algorithm == "MASoftQ":
         args = get_maddpg_args(args)
         trainer = MASoftQ.MASoftQ(args = args,policy = ContinuousMLP)

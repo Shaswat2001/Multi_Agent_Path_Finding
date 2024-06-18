@@ -45,20 +45,23 @@ class MADDPG:
 
         if self.learning_step<self.args.batch_size:
             return
-        
-        state,action,reward,next_state,done = self.replay_buffer.shuffle()
 
         for ai in range(len(self.args.env_agents)):
 
+            state,action,reward,next_state,done = self.replay_buffer.shuffle()
             agent = self.args.env_agents[ai]
-            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
-            reward_i = reward[:,ai]
-            next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
-            done_i = done[:,ai]
+
+            reward_i = reward[:,ai].view(-1,1)
+            done_i = done[:,ai].view(-1,1)
 
             target_action_list = []
             actions_list = []
-            for agt in self.args.env_agents:
+            for aj in range(len(self.args.env_agents)):
+
+                agt = self.args.env_agents[aj]
+                state_i = state[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
+                next_state_i = next_state[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
+
                 target_critic_action = self.TargetPolicyNetwork[agt](next_state_i)
                 target_action = self.PolicyNetwork[agt](state_i)
                 target_action_list.append(target_critic_action)
@@ -88,9 +91,9 @@ class MADDPG:
 
     def reset(self):
 
-        self.replay_buffer = ReplayBuffer(self.args)
+        self.replay_buffer = ReplayBuffer(self.args,reward_type="ind",action_space="continuous")
         # Exploration Technique
-        self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
+        self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.3) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
         self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}

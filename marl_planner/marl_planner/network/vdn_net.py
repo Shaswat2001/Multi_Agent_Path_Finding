@@ -28,14 +28,14 @@ class VDNCritic(nn.Module):
                                     )
         
         self.VNet = nn.Sequential(
-                                nn.Linear(self.critic_hidden,args.critic_hidden),
+                                nn.Linear(args.critic_hidden,args.critic_hidden),
                                 nn.ReLU(),
-                                nn.Linear(self.critic_hidden,1)
+                                nn.Linear(args.critic_hidden,1)
                             )
         self.AdvNet = nn.Sequential(
-                                    nn.Linear(self.critic_hidden,args.critic_hidden),
+                                    nn.Linear(args.critic_hidden,args.critic_hidden),
                                     nn.ReLU(),
-                                    nn.Linear(self.critic_hidden,args.n_action)
+                                    nn.Linear(args.critic_hidden,self.n_action)
                                 )
 
     def forward(self,obs):

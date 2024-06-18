@@ -15,67 +15,70 @@ class VDN:
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
 
+        self.obs_shape = self.args.input_shape[self.args.env_agents[0]]
+        self.action_space = self.args.n_actions[self.args.env_agents[0]]
+        self.epsilon = args.epsilon
+        self.epsilon_min = args.epsilon_min
+
+        self.epsilon_decay = (self.epsilon - self.epsilon_min)/50000
+
         self.reset()
 
     def choose_action(self,observation,stage="training"):
+        if self.learning_step < 50000:
+            self.epsilon -= self.epsilon_decay
+
+            self.epsilon = max(self.epsilon,self.epsilon_min)
+        else:
+            self.epsilon = self.epsilon_min
 
         action = {}
         for agent in self.args.env_agents:
-
+            
             state = torch.Tensor(observation[agent])
-            if stage == "training":
-                
-                act_n = self.PolicyNetwork[agent](state,sample=True).action.detach().numpy()
-            else:
-                act_n = self.TargetPolicyNetwork[agent](state).action.detach().numpy()
-        
-            action[agent] = act_n
+            qval = self.PolicyNetwork[agent](state)
 
+            if stage == "training" and np.random.normal() < self.epsilon:
+
+                act = np.random.choice(self.action_space)
+                action[agent] = act
+            else:
+                action[agent] = int(qval.argmax(dim = 0).detach().numpy())
+        
         return action
 
-    def learn(self,agents):
+    def learn(self):
         
         self.learning_step+=1
 
         if self.learning_step<self.args.batch_size:
             return
         
-        state_n = []
-        action_n = []
-        reward_n = []
-        next_state_n = []
-        done_n = []
+        state,action,reward,next_state,_ = self.replay_buffer.shuffle()
+        q_values = []
+        target_q_values = []
 
-        for i in range(len(agents)):
-            state,action,reward,next_state,done = agents[i].replay_buffer.shuffle()
+        for ai in range(len(self.args.env_agents)):
 
-            state_n.append(state)
-            action_n.append(action)
-            reward_n.append(reward)
-            next_state_n.append(next_state)
-            done_n.append(done)
+            agent = self.args.env_agents[ai]
 
-        target_action_list = []
-        actions_list = []
-        for i in range(len(agents)):
-            target_critic_action = agents[i].TargetPolicyNetwork(next_state_n[i])
-            target_action = agents[i].PolicyNetwork(state_n[i])
-            target_action_list.append(target_critic_action)
-            actions_list.append(target_action)
+            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_state_i = next_state[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
+            action_i = action[:,ai].view(-1,1)
 
-        target = self.TargetQNetwork(torch.hstack(next_state_n),torch.hstack(target_action_list))
-        y = reward_n[self.agent_num] + self.args.gamma*target*(1-done_n[self.agent_num])
-        critic_value = self.Qnetwork(torch.hstack(state_n),torch.hstack(action_n))
-        critic_loss = torch.mean(torch.square(y - critic_value),dim=1)
-        self.QOptimizer.zero_grad()
-        critic_loss.mean().backward()
-        self.QOptimizer.step()
+            qval = self.PolicyNetwork[agent](state_i).gather(1,action_i)
+            next_qval,_ = self.TargetPolicyNetwork[agent](next_state_i).max(1,keepdims = True)
 
-        # actions = self.PolicyNetwork(state)
-        critic_value = self.Qnetwork(torch.hstack(state_n),torch.hstack(actions_list))
-        actor_loss = -critic_value.mean()
+            q_values.append(qval)
+            target_q_values.append(next_qval)
+
+        q_tot = self.VDNMixer(torch.hstack(q_values))
+        q_tot_target = self.VDNMixer(torch.hstack(target_q_values))
+
+        y = reward + self.args.gamma*q_tot_target
+        critic_loss = torch.mean(torch.square(y.detach() - q_tot),dim=1)
         self.PolicyOptimizer.zero_grad()
-        actor_loss.mean().backward()
+        critic_loss.mean().backward()
         self.PolicyOptimizer.step()
 
         if self.learning_step%self.args.target_update == 0:                
@@ -89,8 +92,14 @@ class VDN:
         self.replay_buffer = ReplayBuffer(self.args)
                 
         self.PolicyNetwork = {agent:VDNCritic(self.args,agent) for agent in self.args.env_agents} 
-        self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
-        self.TargetPolicyNetwork = {agent:VDNCritic(self.args,agent) for agent in self.args.env_agents} 
+        self.policy_parameters = []
+
+        for policy in self.PolicyNetwork.values():
+
+            self.policy_parameters += policy.parameters()
+
+        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.actor_lr)
+        self.TargetPolicyNetwork = {agent:VDNCritic(self.args,agent) for agent in self.args.env_agents}
 
         self.VDNMixer = VDNMixer() 
         self.TargetVDNMixer = VDNMixer() 
@@ -112,12 +121,12 @@ class VDN:
 
         for agent in self.args.env_agents:
             os.makedirs("config/saves/training_weights/"+ env + f"/vdn_weights/{agent}", exist_ok=True)
-            torch.save(self.PolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/vdn_weights//{agent}/actorWeights.pth")
+            torch.save(self.PolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/vdn_weights/{agent}/actorWeights.pth")
             torch.save(self.TargetPolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/vdn_weights/{agent}/TargetactorWeights.pth")
 
     def load(self,env):
         
         for agent in self.args.env_agents:
-            self.PolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/vdn_weights//{agent}/actorWeights.pth",map_location=torch.device('cpu')))
+            self.PolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/vdn_weights/{agent}/actorWeights.pth",map_location=torch.device('cpu')))
             self.TargetPolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/vdn_weights/{agent}/TargetactorWeights.pth",map_location=torch.device('cpu')))
         

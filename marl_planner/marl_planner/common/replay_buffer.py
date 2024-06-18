@@ -3,10 +3,12 @@ import torch
 
 class ReplayBuffer:
 
-    def __init__(self,args):
+    def __init__(self,args,reward_type = "global",action_space = "discrete"):
         self.args = args
         self.mem_size = args.mem_size
         self.env_agents = args.env_agents
+        self.reward_type = reward_type
+        self.action_space = action_space
         self.current_mem = 0
         self.observation = [0]*self.mem_size
         self.action = [0]*self.mem_size
@@ -22,7 +24,7 @@ class ReplayBuffer:
             index = self.current_mem
         else:
             index = self.current_mem%self.mem_size
-        
+
         self.observation[index] = observation
         self.action[index] = action
         self.reward[index] = reward
@@ -61,13 +63,22 @@ class ReplayBuffer:
         done = []
         for idx in index:
             observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
-            action.append(torch.hstack([torch.Tensor(act) for act in self.action[idx].values()]))
-            reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
+
+            if self.action_space == "discrete":
+                action.append(torch.hstack([torch.Tensor([act]) for act in self.action[idx].values()]))
+            else:
+                action.append(torch.hstack([torch.Tensor(act) for act in self.action[idx].values()]))
+
+            if self.reward_type == "global":
+                reward.append(torch.Tensor([self.reward[idx]]))
+            else:
+                reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
+
             next_observation.append(torch.hstack([torch.Tensor(nxt_obs) for nxt_obs in self.next_observation[idx].values()]))
             done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
         
         observation = torch.vstack(observation)
-        action = torch.vstack(action)
+        action = torch.vstack(action).to(torch.int64)
         reward = torch.vstack(reward)
         next_observation = torch.vstack(next_observation)
         done = torch.vstack(done)

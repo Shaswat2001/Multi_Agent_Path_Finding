@@ -11,15 +11,15 @@ def build_parse():
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="MADDPG",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="VDN",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
-    parser.add_argument('gamma',nargs="?",default=0.95)
+    parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
     parser.add_argument('critic_lr',nargs="?",type=float,default=0.0001,help="Learning rate of the Q Network")
     parser.add_argument('is_continous',nargs="?",type=bool,default=True,help="Action space is discrete or continous")
 
     parser.add_argument("mem_size",nargs="?",type=int,default=100000,help="Size of Replay Buffer")
-    parser.add_argument("batch_size",nargs="?",type=int,default=128,help="Batch Size used during training")
+    parser.add_argument("batch_size",nargs="?",type=int,default=64,help="Batch Size used during training")
     parser.add_argument("n_agents",nargs="?",type=int,default=2,help="Total number of agents in the environment")
     parser.add_argument("n_episodes",nargs="?",type=int,default=1000000,help="Total number of episodes to train the agent")
     parser.add_argument("n_batches",nargs="?",type=int,default=10,help="Total number of times the RL needs to be replicated")
@@ -50,6 +50,22 @@ def get_maddpg_args(args):
 
     args.critic_hidden = 64
     args.policy_hidden = 64
+
+    args.target_update = 2
+    
+    return args
+
+def get_vdn_args(args):
+
+    args.is_continous = True
+
+    args.critic_hidden = 64
+    args.policy_hidden = 64
+
+    args.target_update = 2
+
+    args.epsilon = 1.0
+    args.epsilon_min = 0.05
     
     return args
 
@@ -69,6 +85,9 @@ def get_coma_args(args):
 
     args.critic_lr = 0.01
     args.actor_lr = 0.01
+
+    args.gamma = 0.95
+    args.batch_size = 128
 
     return args
 

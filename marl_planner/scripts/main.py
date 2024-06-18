@@ -10,7 +10,7 @@ import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
-from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ
+from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN
 from marl_planner.network.base_net import DiscreteMLP, GaussianNet, ContinuousMLP, RNN
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
@@ -24,14 +24,20 @@ def train(args,env,trainer):
     
     for i in range(args.n_episodes):
         observation, _ = env.reset()
-        reward = 0
+        global_reward = 0
         
         while True:
 
             action = trainer.choose_action(observation)
+
             next_observation,rwd,termination,truncation,info = env.step(action)
-            
-            reward+=sum(list(rwd.values()))
+
+            global_reward += sum(list(rwd.values()))
+
+            if args.Algorithm in ["VDN","QMIX"]:
+                reward = global_reward
+            else:
+                reward = rwd
             
             if all(list(termination.values())) or all(list(truncation.values())): 
                 
@@ -39,7 +45,7 @@ def train(args,env,trainer):
                 for key in termination.keys():
                     done[key] = True
                 
-                trainer.add(observation,action,rwd,next_observation,done)
+                trainer.add(observation,action,reward,next_observation,done)
 
                 if args.Algorithm in ["COMA"]:
                     if i%args.train_network == 0:
@@ -48,14 +54,14 @@ def train(args,env,trainer):
                 break
                 
             else:
-                trainer.add(observation,action,rwd,next_observation,termination)
+                trainer.add(observation,action,reward,next_observation,termination)
             
-            if args.Algorithm in ["MADDPG","MASoftQ"]:
+            if args.Algorithm in ["MADDPG","MASoftQ","VDN"]:
                 trainer.learn()
 
             observation = next_observation
 
-        total_reward.append(reward)
+        total_reward.append(global_reward)
         avg_reward = np.mean(total_reward[-40:])
 
         if avg_reward>best_reward and i > 10:
@@ -85,7 +91,7 @@ if __name__=="__main__":
 
     args = build_parse()
 
-    if args.Algorithm in ["COMA","QMIX"]:
+    if args.Algorithm in ["COMA","QMIX","VDN"]:
         args.is_continous = False
     else:
         args.is_continous = True
@@ -111,5 +117,8 @@ if __name__=="__main__":
     elif args.Algorithm == "MASoftQ":
         args = get_maddpg_args(args)
         trainer = MASoftQ.MASoftQ(args = args,policy = ContinuousMLP)
+    elif args.Algorithm == "VDN":
+        args = get_vdn_args(args)
+        trainer = VDN.VDN(args = args)
 
     train(args,env,trainer)
