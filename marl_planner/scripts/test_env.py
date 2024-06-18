@@ -34,6 +34,11 @@ if __name__=="__main__":
 
     args = build_parse()
 
+    if args.Algorithm in ["COMA","QMIX"]:
+        args.is_continous = False
+    else:
+        args.is_continous = True
+
     # env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous,render_mode="human")
     env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
     env.reset()

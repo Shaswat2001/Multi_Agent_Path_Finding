@@ -2,7 +2,8 @@ import torch
 from torch import nn 
 import torch.nn.functional as F
 from torch.autograd import Variable
-
+from marl_planner.common.utils import *
+    
 class ContinuousMLP(nn.Module):
 
     def __init__(self,args,agent):
@@ -54,10 +55,10 @@ class DiscreteMLP(nn.Module):
 
         return action
     
-class SACDiscreteMLP(nn.Module):
+class GaussianNet(nn.Module):
 
     def __init__(self, args,agent):
-        super(SACDiscreteMLP,self).__init__()
+        super(GaussianNet,self).__init__()
 
         self.args = args
         self.actionNet =  nn.Sequential(
@@ -66,17 +67,32 @@ class SACDiscreteMLP(nn.Module):
             nn.Linear(args.policy_hidden,args.policy_hidden),
             nn.ReLU(),
             nn.Linear(args.policy_hidden,args.n_actions[agent]),
-            nn.Softmax(dim=-1)
         )
 
-    def forward(self,state):
+    def forward(self,state,sample = False):
 
         out = self.actionNet(state)
-        int_action = torch.multinomial(out,1)
-        action = Variable(torch.FloatTensor(*out.shape).fill_(0)).scatter_(1,int_action,1)
+        probability = F.softmax(out,dim = 1)
+
+        if sample:
+            int_action,action = categorical_sample(probability)
+        else:
+            action = onehot_from_logits(probability)
+
         log_prob  = F.log_softmax(out)
 
-        return int_action,action,log_prob
+        if sample:
+            specific_log_prob = log_prob.gather(1,int_action)
+        else:
+            specific_log_prob = None
+
+        regularise_action = (out**2).mean()
+
+        entropy = -(log_prob*probability).sum(1).mean()
+
+        output = PolicyOps(action=action, log_prob=log_prob, entropy=entropy, pi=out, reg_pi=regularise_action, specific_log_prob=specific_log_prob)
+
+        return output
 
 class RNN(nn.Module):
 

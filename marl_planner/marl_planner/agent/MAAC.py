@@ -19,14 +19,19 @@ class MAAC:
 
         self.reset()
 
-    def choose_action(self,state,stage="training"):
+    def choose_action(self,observation,stage="training"):
 
-        state = torch.Tensor(state)
+        action = {}
+        for agent in self.args.env_agents:
+
+            state = torch.Tensor(observation[agent])
+            if stage == "training":
+                
+                act_n = self.PolicyNetwork[agent](state,sample=True).action.detach().numpy()
+            else:
+                act_n = self.TargetPolicyNetwork[agent](state).action.detach().numpy()
         
-        if stage == "training":
-            action = self.PolicyNetwork(state).detach().numpy()
-        else:
-            action = self.TargetPolicyNetwork(state).detach().numpy()
+            action[agent] = act_n
 
         return action
 
@@ -89,9 +94,9 @@ class MAAC:
         self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
         self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents} 
 
-        self.Qnetwork = self.critic(self.args.input_shape,self.args.n_actions,self.args.n_agents) 
+        self.Qnetwork = AttentionCritic(self.args) 
         self.QOptimizer = torch.optim.Adam(self.Qnetwork.parameters(),lr=self.args.critic_lr)
-        self.TargetQNetwork = self.critic(self.args.input_shape,self.args.n_actions,self.args.n_agents) 
+        self.TargetQNetwork = AttentionCritic(self.args) 
 
         self.network_hard_updates()
     

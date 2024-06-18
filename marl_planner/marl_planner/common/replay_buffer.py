@@ -3,20 +3,26 @@ import torch
 
 class ReplayBuffer:
 
-    def __init__(self,args,agent):
+    def __init__(self,args):
         self.args = args
-        self.agent = agent
         self.mem_size = args.mem_size
+        self.env_agents = args.env_agents
         self.current_mem = 0
-        self.observation = np.zeros(shape=(args.mem_size,args.input_shape[agent]))
-        self.action = np.zeros(shape=(args.mem_size,args.action_space[agent]))
-        self.reward = np.zeros(shape=(args.mem_size,1))
-        self.next_observation = np.zeros(shape=(args.mem_size,args.input_shape[agent]))
-        self.done = np.zeros(shape=(args.mem_size,1))
+        self.observation = [0]*self.mem_size
+        self.action = [0]*self.mem_size
+        self.reward = [0]*self.mem_size
+        self.next_observation = [0]*self.mem_size
+        self.done = [0]*self.mem_size
         self.batch_size = args.batch_size
 
     def store(self,observation,action,reward,next_observation,done):
-        index = self.current_mem%self.mem_size
+
+        if self.current_mem < self.mem_size:
+            
+            index = self.current_mem
+        else:
+            index = self.current_mem%self.mem_size
+        
         self.observation[index] = observation
         self.action[index] = action
         self.reward[index] = reward
@@ -27,11 +33,11 @@ class ReplayBuffer:
     def reset(self):
 
         self.current_mem = 0
-        self.observation = np.zeros(shape=(self.mem_size,self.args.input_shape[self.agent]))
-        self.action = np.zeros(shape=(self.mem_size,self.args.action_space[self.agent]))
-        self.reward = np.zeros(shape=(self.mem_size,1))
-        self.next_observation = np.zeros(shape=(self.mem_size,self.args.input_shape[self.agent]))
-        self.done = np.zeros(shape=(self.mem_size,1))
+        self.observation = [0]*self.mem_size
+        self.action = [0]*self.mem_size
+        self.reward = [0]*self.mem_size
+        self.next_observation = [0]*self.mem_size
+        self.done = [0]*self.mem_size
 
     def get_episode(self):
 
@@ -48,11 +54,23 @@ class ReplayBuffer:
         max_mem = min(self.mem_size, self.current_mem)
         index = np.random.choice(max_mem, self.batch_size)
 
-        observation = torch.Tensor(self.observation[index])
-        action = torch.Tensor(self.action[index])
-        reward = torch.Tensor(self.reward[index])
-        next_observation = torch.Tensor(self.next_observation[index])
-        done = torch.Tensor(self.done[index])
+        observation = []
+        action = []
+        reward = []
+        next_observation = []
+        done = []
+        for idx in index:
+            observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
+            action.append(torch.hstack([torch.Tensor(act) for act in self.action[idx].values()]))
+            reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
+            next_observation.append(torch.hstack([torch.Tensor(nxt_obs) for nxt_obs in self.next_observation[idx].values()]))
+            done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
+        
+        observation = torch.vstack(observation)
+        action = torch.vstack(action)
+        reward = torch.vstack(reward)
+        next_observation = torch.vstack(next_observation)
+        done = torch.vstack(done)
 
         return (observation,action,reward,next_observation,done)
     

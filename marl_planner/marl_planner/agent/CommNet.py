@@ -10,4 +10,9 @@ class CommNet:
     '''
     def __init__(self,args,policy,critic,replayBuff):
 
+        self.args = args
+        self.policy = policy
+
+    def reset(self):
+
         pass

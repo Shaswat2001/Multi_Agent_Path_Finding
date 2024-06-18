@@ -2,10 +2,11 @@ from collections import namedtuple
 import numpy as np
 import torch
 from torch import nn
+from torch.autograd import Variable
 
 EPS = 1e-8
 
-PolicyOps = namedtuple('PolicyOps', 'raw_mean mean log_std pi log_prob_pi')
+PolicyOps = namedtuple('PolicyOps', 'action log_prob entropy pi reg_pi specific_log_prob')
 
 def soft_update(target,source, tau):
 
@@ -68,3 +69,22 @@ def clip_but_pass_gradient(x, low=-1., high=1.):
     clip_low = clip_low.type(torch.FloatTensor)
     val = (high - x) * clip_up + (low - x) * clip_low
     return x + val.detach()
+
+def categorical_sample(probability):
+
+    int_action = torch.multinomial(probability,1)
+    action = Variable(torch.FloatTensor(*probability.shape).fill_(0)).scatter_(1,int_action,1)
+
+    return int_action, action
+
+def onehot_from_logits(logits,eps = 0.0, dim = 1):
+
+    argmax_acs = (logits == logits.max(dim, keepdim=True)[0]).float()
+    if eps == 0.0:
+        return argmax_acs
+    # get random actions in one-hot form
+    rand_acs = Variable(torch.eye(logits.shape[1])[[np.random.choice(
+        range(logits.shape[1]), size=logits.shape[0])]], requires_grad=False)
+    # chooses between best and random actions using epsilon greedy
+    return torch.stack([argmax_acs[i] if r > eps else rand_acs[i] for i, r in
+                        enumerate(torch.rand(logits.shape[0]))])

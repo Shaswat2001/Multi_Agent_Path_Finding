@@ -14,7 +14,8 @@ class MADDPG:
 
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
-        # Replay Buffer provided by the user
+        self.obs_shape = self.args.input_shape[self.args.env_agents[0]]
+        self.action_space = self.args.n_actions[self.args.env_agents[0]]
         self.policy = policy
 
         self.reset()
@@ -45,39 +46,34 @@ class MADDPG:
         if self.learning_step<self.args.batch_size:
             return
         
-        for agent in self.args.env_agents:
-            state_n = {}
-            action_n = {}
-            reward_n = {}
-            next_state_n = {}
-            done_n = {}
-            for agt in self.args.env_agents:
-                state,action,reward,next_state,done = self.replay_buffer[agt].shuffle()
+        state,action,reward,next_state,done = self.replay_buffer.shuffle()
 
-                state_n[agt] = state
-                action_n[agt] = action
-                reward_n[agt] = reward
-                next_state_n[agt] = next_state
-                done_n[agt] = done
+        for ai in range(len(self.args.env_agents)):
+
+            agent = self.args.env_agents[ai]
+            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            reward_i = reward[:,ai]
+            next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
+            done_i = done[:,ai]
 
             target_action_list = []
             actions_list = []
             for agt in self.args.env_agents:
-                target_critic_action = self.TargetPolicyNetwork[agt](next_state_n[agt])
-                target_action = self.PolicyNetwork[agt](state_n[agt])
+                target_critic_action = self.TargetPolicyNetwork[agt](next_state_i)
+                target_action = self.PolicyNetwork[agt](state_i)
                 target_action_list.append(target_critic_action)
                 actions_list.append(target_action)
 
-            target = self.TargetQNetwork[agent](torch.hstack(list(next_state_n.values())),torch.hstack(target_action_list))
-            y = reward_n[agent] + self.args.gamma*target*(1-done_n[agent])
-            critic_value = self.Qnetwork[agent](torch.hstack(list(state_n.values())),torch.hstack(list(action_n.values())))
+            target = self.TargetQNetwork[agent](next_state,torch.hstack(target_action_list))
+            y = reward_i + self.args.gamma*target*(1-done_i)
+            critic_value = self.Qnetwork[agent](state,action)
             critic_loss = torch.mean(torch.square(y.detach() - critic_value),dim=1)
             self.QOptimizer[agent].zero_grad()
             critic_loss.mean().backward()
             self.QOptimizer[agent].step()
 
             # actions = self.PolicyNetwork(state)
-            critic_value = self.Qnetwork[agent](torch.hstack(list(state_n.values())),torch.hstack(actions_list))
+            critic_value = self.Qnetwork[agent](state,torch.hstack(actions_list))
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.mean().backward()
@@ -88,12 +84,11 @@ class MADDPG:
 
     def add(self,s,action,rwd,next_state,done):
 
-        for agent in self.args.env_agents:
-            self.replay_buffer[agent].store(s[agent],action[agent],rwd[agent],next_state[agent],done[agent])
+        self.replay_buffer.store(s,action,rwd,next_state,done)
 
     def reset(self):
 
-        self.replay_buffer = {agent:ReplayBuffer(self.args,agent) for agent in self.args.env_agents}
+        self.replay_buffer = ReplayBuffer(self.args)
         # Exploration Technique
         self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         

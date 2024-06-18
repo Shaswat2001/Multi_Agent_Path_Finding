@@ -5,6 +5,8 @@ from marl_planner.common.utils import hard_update
 from marl_planner.network.coma_critic import ComaCritic
 from marl_planner.common.replay_buffer import ReplayBuffer
 from torch.distributions import Categorical
+from torch.autograd import Variable
+from marl_planner.common.utils import onehot_from_logits
 
 class COMA:
     '''
@@ -37,15 +39,14 @@ class COMA:
         action = {}
         for agent in self.args.env_agents:
             
-            
-            if np.random.random() < self.epsilon and stage == "training":
-                action[agent] = np.random.choice(self.args.n_actions[agent])
+            state = torch.Tensor(observation[agent])
+            probability = self.PolicyNetwork[agent](state)
+            if stage == "training":
+                int_action = torch.multinomial(probability,1)
+                action[agent] = int_action[0].detach().numpy()
             else:
-                state = torch.Tensor(observation[agent])
-                distribution = self.PolicyNetwork[agent](state)
-                act_n = distribution.max(dim=0)[1].detach().cpu().numpy()
-                action[agent] = act_n
-
+                action[agent] = onehot_from_logits(probability,eps = self.epsilon).detach().numpy()
+        
         return action
     
 
@@ -72,7 +73,7 @@ class COMA:
             state_n[agt] = state
             action_n[agt] = action
             reward_n[agt] = reward
-            distribution_n[agt] = self.get_action_prob(self.PolicyNetwork[agt](state))
+            distribution_n[agt] = self.PolicyNetwork[agt](state)
             next_state_n[agt] = next_state
             done_n[agt] = done
 
@@ -84,11 +85,13 @@ class COMA:
 
             action_taken = action_n[self.args.env_agents[i]].type(torch.long).reshape(-1, 1)
 
-            baseline = torch.sum(distribution_n[self.args.env_agents[i]] * Q_target, dim=1).detach()
-            Q_taken_target = torch.gather(Q_target, dim=1, index=action_taken).squeeze().detach()
+            # distribution = self.get_action_prob(self.get_correct_distribution(distribution_n[self.args.env_agents[i]],action_taken))
+            distribution = self.get_action_prob(distribution_n[self.args.env_agents[i]])
+            baseline = torch.sum(distribution * Q_target, dim=1).detach()
+            Q_taken_target = torch.gather(Q_target, dim=1, index=action_taken).squeeze()
             advantage = Q_taken_target - baseline
 
-            log_pi = torch.log(torch.gather(distribution_n[self.args.env_agents[i]], dim=1, index=action_taken).squeeze() + 1e-10)
+            log_pi = torch.log(torch.gather(distribution, dim=1, index=action_taken).squeeze() +  1e-10)
 
             actor_loss = -torch.mean(advantage * log_pi)
 
@@ -111,7 +114,7 @@ class COMA:
                 if done_n[self.args.env_agents[i]][t]:
                     r[t] = reward_n[self.args.env_agents[i]][t]
                 else:
-                    r[t] = reward_n[self.args.env_agents[i]][t] + self.args.gamma * Q_taken_target[t + 1] * (1 - done_n[self.args.env_agents[i]][t])
+                    r[t] = reward_n[self.args.env_agents[i]][t] + self.args.gamma * Q_taken_target[t + 1] 
             
             critic_loss = torch.mean((r - Q_taken) ** 2)
 
@@ -125,6 +128,16 @@ class COMA:
         
         for agt in self.args.env_agents:
             self.replay_buffer[agt].reset()
+
+    def get_correct_distribution(self,distribution_agent,action):
+
+
+        rows = torch.arange(distribution_agent.shape[0])
+        cols = action.squeeze()
+
+        distribution_agent[rows,cols] = 1.0
+
+        return distribution_agent
 
     def add(self,s,action,rwd,next_state,done):
 
