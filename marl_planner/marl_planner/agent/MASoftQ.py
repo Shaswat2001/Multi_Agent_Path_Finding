@@ -45,37 +45,29 @@ class MASoftQ:
         if self.learning_step<self.args.batch_size:
             return
         
-        state_n = {}
-        action_n = {}
-        reward_n = {}
-        next_state_n = {}
-        done_n = {}
 
-        reward_mean = 0
+        state,action,reward,next_state,done = self.replay_buffer.shuffle()
 
-        for agt in self.args.env_agents:
-            state,action,reward,next_state,done = self.replay_buffer[agt].shuffle()
+        for ai in range(len(self.args.env_agents)):
 
-            state_n[agt] = state
-            action_n[agt] = action
-            reward_n[agt] = reward
-            next_state_n[agt] = next_state
-            done_n[agt] = done
+            agent = self.args.env_agents[ai]
+            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            reward_i = reward[:,ai]
+            next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
+            done_i = done[:,ai]
 
-            reward_mean += reward
-
-        target_action_list = []
-        actions_list = []
-        for agt in self.args.env_agents:
-            target_critic_action = self.TargetPolicyNetwork[agt](next_state_n[agt])
-            target_action = self.PolicyNetwork[agt](state_n[agt])
-            target_action_list.append(target_critic_action)
-            actions_list.append(target_action)
-
-        target_q = self.TargetQNetwork(torch.hstack(list(next_state_n.values())),torch.hstack(target_action_list))
+            target_action_list = []
+            actions_list = []
+            for agt in self.args.env_agents:
+                target_critic_action = self.TargetPolicyNetwork[agt](next_state_i)
+                target_action = self.PolicyNetwork[agt](state_i)
+                target_action_list.append(target_critic_action)
+                actions_list.append(target_action)
+        
+        target_q = self.TargetQNetwork(next_state,torch.hstack(target_action_list))
         target_v = torch.logsumexp(target_q, dim=1,keepdim=True)
-        y = reward_mean + self.args.gamma*target_v
-        critic_value = self.Qnetwork(torch.hstack(list(state_n.values())),torch.hstack(list(action_n.values())))
+        y = reward.sum(dim = 1, keepdim=True) + self.args.gamma*target_v
+        critic_value = self.Qnetwork(state,action)
         critic_loss = torch.mean(torch.square(y - critic_value),dim=1)
         self.QOptimizer.zero_grad()
         critic_loss.mean().backward()
@@ -83,15 +75,7 @@ class MASoftQ:
 
         for agent in self.args.env_agents:
             
-            target_action_list = []
-            actions_list = []
-            for agt in self.args.env_agents:
-                target_critic_action = self.TargetPolicyNetwork[agt](next_state_n[agt])
-                target_action = self.PolicyNetwork[agt](state_n[agt])
-                target_action_list.append(target_critic_action)
-                actions_list.append(target_action)
-
-            critic_value = self.Qnetwork(torch.hstack(list(state_n.values())),torch.hstack(actions_list))
+            critic_value = self.Qnetwork(state,torch.hstack(actions_list))
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.mean().backward()
