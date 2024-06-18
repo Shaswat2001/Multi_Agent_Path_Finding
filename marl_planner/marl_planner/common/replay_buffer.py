@@ -11,9 +11,11 @@ class ReplayBuffer:
         self.action_space = action_space
         self.current_mem = 0
         self.observation = [0]*self.mem_size
+        self.state = [0]*self.mem_size
         self.action = [0]*self.mem_size
         self.reward = [0]*self.mem_size
         self.next_observation = [0]*self.mem_size
+        self.next_state = [0]*self.mem_size
         self.done = [0]*self.mem_size
         self.batch_size = args.batch_size
 
@@ -36,9 +38,11 @@ class ReplayBuffer:
 
         self.current_mem = 0
         self.observation = [0]*self.mem_size
+        self.state = [0]*self.mem_size
         self.action = [0]*self.mem_size
         self.reward = [0]*self.mem_size
         self.next_observation = [0]*self.mem_size
+        self.next_state = [0]*self.mem_size
         self.done = [0]*self.mem_size
 
     def get_episode(self):

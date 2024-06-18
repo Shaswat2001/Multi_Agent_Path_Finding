@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import os
-from marl_planner.common.utils import hard_update
+from marl_planner.common.utils import hard_update,soft_update
 from marl_planner.network.qmix_net import QMixer
 from marl_planner.common.replay_buffer import ReplayBuffer
 from torch.distributions import Categorical
@@ -17,25 +17,41 @@ class QMIX:
         # Replay Buffer provided by the user
         self.policy = policy
 
+        self.obs_shape = self.args.input_shape[self.args.env_agents[0]]
+        self.action_space = self.args.n_actions[self.args.env_agents[0]]
+        self.epsilon = args.epsilon
+        self.epsilon_min = args.epsilon_min
+
+        self.epsilon_decay = (self.epsilon - self.epsilon_min)/50000
+
         self.reset()
 
     def choose_action(self,observation,stage="training"):
 
+        if self.learning_step < 50000:
+            self.epsilon -= self.epsilon_decay
+
+            self.epsilon = max(self.epsilon,self.epsilon_min)
+        else:
+            self.epsilon = self.epsilon_min
+
         action = {}
-        for agent in self.args.env_agents:
+
+        self.init_rnn_hidden(1)
+        for ai in range(len(self.args.env_agents)):
+            
+            agent = self.args.env_agents[ai]
 
             state = torch.Tensor(observation[agent])
-            if stage == "training":
-                
-                act_n = self.PolicyNetwork[agent](state).detach().numpy()
-                act_n += self.noiseOBJ[agent]()
+            qval = self.PolicyNetwork[agent](state,self.policy_hidden[:,ai,:])
+
+            if stage == "training" and np.random.normal() < self.epsilon:
+
+                act = np.random.choice(self.action_space)
+                action[agent] = act
             else:
-                act_n = self.TargetPolicyNetwork[agent](state).detach().numpy()
-
-            act_n = np.clip(act_n,self.args.min_action[agent],self.args.max_action[agent])
+                action[agent] = int(qval.argmax(dim = 0).detach().numpy())
         
-            action[agent] = act_n
-
         return action
     
 
@@ -51,14 +67,40 @@ class QMIX:
         if self.learning_step<self.args.batch_size:
             return
         
+        state,action,reward,next_state,_ = self.replay_buffer.shuffle()
+        q_values = []
+        target_q_values = []
+
+        self.init_rnn_hidden(state.shape[0])
+        for ai in range(len(self.args.env_agents)):
+
+            agent = self.args.env_agents[ai]
+
+            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_state_i = next_state[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
+            action_i = action[:,ai].view(-1,1)
+
+            qval = self.PolicyNetwork[agent](state_i).gather(1,action_i)
+            next_qval,_ = self.TargetPolicyNetwork[agent](next_state_i).max(1,keepdims = True)
+
+            q_values.append(qval)
+            target_q_values.append(next_qval)
+
+        q_tot = self.Qmixer(torch.hstack(q_values))
+        q_tot_target = self.TargetQmixer(torch.hstack(target_q_values))
+
+        y = reward + self.args.gamma*q_tot_target
+        critic_loss = torch.mean(torch.square(y.detach() - q_tot),dim=1)
+        self.Optimizer.zero_grad()
+        critic_loss.mean().backward()
+        self.Optimizer.step()
+
         if self.learning_step%self.args.target_update == 0:                
-            hard_update(self.TargetQmixer,self.Qmixer)
-            hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
+            self.network_soft_updates()
 
     def add(self,s,action,rwd,next_state,done):
 
-        for agent in self.args.env_agents:
-            self.replay_buffer[agent].store(s[agent],action[agent],rwd[agent],next_state[agent],done[agent])
+        self.replay_buffer.store(s,action,rwd,next_state,done)
 
     def get_critic_input(self,id,observation,action):
 
@@ -73,18 +115,35 @@ class QMIX:
 
         self.replay_buffer = ReplayBuffer(self.args)
         
-        self.PolicyNetwork = self.policy(self.args)
-        self.TargetPolicyNetwork = self.policy(self.args)
+        self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents} 
+        self.policy_parameters = []
+
+        for policy in self.PolicyNetwork.values():
+
+            self.policy_parameters += policy.parameters()
+
+        self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents} 
 
         self.Qmixer = QMixer(self.args)
         self.TargetQmixer = QMixer(self.args)
 
-        self.network_parameters = self.Qmixer.parameters() + self.PolicyNetwork.parameters()
+        self.policy_parameters += self.Qmixer.parameters()
 
-        self.Optimizer = torch.optim.Adam(self.network_parameters,lr=self.args.critic_lr)
+        self.Optimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.critic_lr)
+
+        self.network_hard_updates()
+    
+    def network_hard_updates(self):
 
         hard_update(self.TargetQmixer,self.Qmixer)
-        hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
+        for agent in self.args.env_agents:
+            hard_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent])
+    
+    def network_soft_updates(self):
+
+        soft_update(self.TargetQmixer,self.Qmixer,self.args.tau)
+        for agent in self.args.env_agents:
+            soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)
     
     def save(self,env):
         print("-------SAVING NETWORK -------")

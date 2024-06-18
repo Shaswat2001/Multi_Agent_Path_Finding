@@ -96,17 +96,17 @@ class GaussianNet(nn.Module):
 
 class RNN(nn.Module):
 
-    def __init__(self,args):
+    def __init__(self,args,agent):
         super(RNN,self).__init__()
 
         self.args = args
         self.actionNet =  nn.Sequential(
-            nn.Linear(args.input_shape,args.rnn_hidden),
+            nn.Linear(args.input_shape[agent],args.rnn_hidden),
             nn.ReLU()
         )
         self.rnnNet = nn.GRUCell(args.rnn_hidden,args.rnn_hidden)
 
-        self.qNet = nn.Linear(args.rnn_hidden,args.n_actions)
+        self.qNet = nn.Linear(args.rnn_hidden,args.n_actions[agent])
 
     def forward(self,obs,hidden_unit):
 
