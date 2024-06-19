@@ -11,7 +11,7 @@ def build_parse():
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="MASoftQ",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="MATD3",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")

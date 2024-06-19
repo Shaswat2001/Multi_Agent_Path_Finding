@@ -10,7 +10,7 @@ import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
-from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN
+from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3
 from marl_planner.network.base_net import DiscreteMLP, GaussianNet, ContinuousMLP, RNN
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
@@ -56,7 +56,7 @@ def train(args,env,trainer):
             else:
                 trainer.add(observation,action,reward,next_observation,termination)
             
-            if args.Algorithm in ["MADDPG","MASoftQ","VDN"]:
+            if args.Algorithm in ["MADDPG","MASoftQ","VDN","MATD3"]:
                 trainer.learn()
 
             observation = next_observation
@@ -105,6 +105,9 @@ if __name__=="__main__":
     if args.Algorithm == "MADDPG":
         args = get_maddpg_args(args)
         trainer = MADDPG.MADDPG(args = args,policy = ContinuousMLP)
+    if args.Algorithm == "MATD3":
+        args = get_maddpg_args(args)
+        trainer = MATD3.MATD3(args = args,policy = ContinuousMLP)
     elif args.Algorithm == "COMA":
         args = get_coma_args(args)
         trainer = COMA.COMA(args = args,policy = DiscreteMLP)

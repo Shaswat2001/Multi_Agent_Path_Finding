@@ -45,9 +45,11 @@ class MASoftQ:
 
         if self.learning_step<self.args.batch_size:
             return
-        
 
         state,action,reward,next_state,done = self.replay_buffer.shuffle()
+
+        target_action_list = []
+        actions_list = []
 
         for ai in range(len(self.args.env_agents)):
 
@@ -55,13 +57,10 @@ class MASoftQ:
             state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
             next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
 
-            target_action_list = []
-            actions_list = []
-            for agt in self.args.env_agents:
-                target_critic_action = self.TargetPolicyNetwork[agt](next_state_i)
-                target_action = self.PolicyNetwork[agt](state_i)
-                target_action_list.append(target_critic_action)
-                actions_list.append(target_action)
+            target_critic_action = self.TargetPolicyNetwork[agent](next_state_i)
+            target_action = self.PolicyNetwork[agent](state_i)
+            target_action_list.append(target_critic_action)
+            actions_list.append(target_action)
         
         target_q = self.TargetQNetwork(next_state,torch.hstack(target_action_list))
         target_v = torch.logsumexp(target_q, dim=1,keepdim=True)
@@ -71,14 +70,12 @@ class MASoftQ:
         self.QOptimizer.zero_grad()
         critic_loss.mean().backward()
         self.QOptimizer.step()
-
-        for agent in self.args.env_agents:
             
-            critic_value = self.Qnetwork(state,torch.hstack(actions_list))
-            actor_loss = -critic_value.mean()
-            self.PolicyOptimizer[agent].zero_grad()
-            actor_loss.mean().backward()
-            self.PolicyOptimizer[agent].step()
+        critic_value = self.Qnetwork(state,torch.hstack(actions_list))
+        actor_loss = -critic_value.mean()
+        self.PolicyOptimizer.zero_grad()
+        actor_loss.mean().backward()
+        self.PolicyOptimizer.step()
 
         if self.learning_step%self.args.target_update == 0:                
             self.network_soft_updates()
@@ -94,7 +91,15 @@ class MASoftQ:
         self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
-        self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
+
+        self.policy_parameters = []
+
+        for policy in self.PolicyNetwork.values():
+
+            self.policy_parameters += policy.parameters()
+
+        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.actor_lr)
+
         self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
 
         self.Qnetwork = MASoftQCritic(self.args)

@@ -6,6 +6,7 @@ from marl_planner.network.coma_critic import ComaCritic
 from marl_planner.common.replay_buffer import ReplayBuffer
 from torch.distributions import Categorical
 from torch.autograd import Variable
+from torch.nn.functional import log_softmax
 from marl_planner.common.utils import onehot_from_logits
 
 class COMA:
@@ -20,7 +21,8 @@ class COMA:
 
         self.epsilon_decay = (self.epsilon - self.epsilon_min)/50000
         self.learning_step = 0 # counter to keep track of learning
-        # Replay Buffer provided by the user
+        self.obs_shape = self.args.input_shape[self.args.env_agents[0]]
+        self.action_space = self.args.n_actions[self.args.env_agents[0]]
         self.policy = policy
 
         self.reset()
@@ -61,62 +63,54 @@ class COMA:
 
     def learn(self):
         
-        state_n = {}
-        action_n = {}
-        reward_n = {}
-        distribution_n = {}
-        next_state_n = {}
-        done_n = {}
+        state,action,reward,next_state,done = self.replay_buffer.get_episode()
 
-        for agt in self.args.env_agents:
-
-            state,action,reward,next_state,done = self.replay_buffer[agt].get_episode()
-
-            state_n[agt] = state
-            action_n[agt] = action
-            reward_n[agt] = reward
-            distribution_n[agt] = self.PolicyNetwork[agt](state)
-            next_state_n[agt] = next_state
-            done_n[agt] = done
-
-        for i in range(len(self.args.env_agents)):
+        for ai in range(len(self.args.env_agents)):
             
-            batch_size = len(reward_n[self.args.env_agents[i]])
-            input_critic = self.get_critic_input(i, state_n, action_n)
+            agent = self.args.env_agents[ai]
+
+            reward_i = reward[:,ai].view(-1,1)
+            done_i = done[:,ai].view(-1,1)
+            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            action_i = action[:,ai].view(-1,1)
+            distribution_i = self.PolicyNetwork[agent](state_i)
+
+            batch_size = len(reward_i)
+            input_critic = self.get_critic_input(ai, state_i, action_i)
             Q_target = self.TargetQNetwork(input_critic).detach()
 
-            action_taken = action_n[self.args.env_agents[i]].type(torch.long).reshape(-1, 1)
+            action_taken = action_i.type(torch.long).reshape(-1, 1)
 
             # distribution = self.get_action_prob(self.get_correct_distribution(distribution_n[self.args.env_agents[i]],action_taken))
-            distribution = self.get_action_prob(distribution_n[self.args.env_agents[i]])
+            distribution = self.get_action_prob(distribution_i)
             baseline = torch.sum(distribution * Q_target, dim=1).detach()
             Q_taken_target = torch.gather(Q_target, dim=1, index=action_taken).squeeze()
             advantage = Q_taken_target - baseline
 
-            log_pi = torch.log(torch.gather(distribution, dim=1, index=action_taken).squeeze() +  1e-10)
+            log_pi = log_softmax(torch.gather(distribution, dim=1, index=action_taken).squeeze() +  1e-10)
 
             actor_loss = -torch.mean(advantage * log_pi)
 
-            self.PolicyOptimizer[self.args.env_agents[i]].zero_grad()
+            self.PolicyOptimizer[agent].zero_grad()
             actor_loss.backward()
             # torch.nn.utils.clip_grad_norm_(self.PolicyNetwork[self.args.env_agents[i]].parameters(), 20)
-            self.PolicyOptimizer[self.args.env_agents[i]].step()
+            self.PolicyOptimizer[agent].step()
 
             # train critic
 
             Q = self.Qnetwork(input_critic)
 
-            action_taken = action_n[self.args.env_agents[i]].type(torch.long).reshape(-1, 1)
+            action_taken = action_i.type(torch.long).reshape(-1, 1)
             Q_taken = torch.gather(Q, dim=1, index=action_taken).squeeze()
 
             # TD(0)
             r = torch.zeros(batch_size)
             for t in range(batch_size):
 
-                if done_n[self.args.env_agents[i]][t]:
-                    r[t] = reward_n[self.args.env_agents[i]][t]
+                if done_i[t]:
+                    r[t] = reward_i[t]
                 else:
-                    r[t] = reward_n[self.args.env_agents[i]][t] + self.args.gamma * Q_taken_target[t + 1] 
+                    r[t] = reward_i[t] + self.args.gamma * Q_taken_target[t + 1] 
             
             critic_loss = torch.mean((r - Q_taken) ** 2)
 
@@ -128,8 +122,7 @@ class COMA:
         if self.learning_step%self.args.target_update == 0:                
             hard_update(self.TargetQNetwork,self.Qnetwork)
         
-        for agt in self.args.env_agents:
-            self.replay_buffer[agt].reset()
+        self.replay_buffer.reset()
 
     def get_correct_distribution(self,distribution_agent,action):
 
@@ -143,21 +136,18 @@ class COMA:
 
     def add(self,s,action,rwd,next_state,done):
 
-        for agent in self.args.env_agents:
-            self.replay_buffer[agent].store(s[agent],action[agent],rwd[agent],next_state[agent],done[agent])
+        self.replay_buffer.store(s,action,rwd,next_state,done)
 
     def get_critic_input(self,id,observation,action):
 
-        observations = torch.hstack(list(observation.values()))
-        batch_size = observations.shape[0]
+        batch_size = observation.shape[0]
         id = (torch.ones(batch_size)*id).view(-1,1)
-        action = torch.hstack(list(action.values()))
 
-        return torch.concatenate((id,observations,action),dim=-1)
+        return torch.concatenate((id,observation,action),dim=-1)
 
     def reset(self):
 
-        self.replay_buffer = {agent:ReplayBuffer(self.args,agent) for agent in self.args.env_agents}
+        self.replay_buffer = ReplayBuffer(self.args,reward_type = "ind")
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
         self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}

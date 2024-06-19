@@ -48,11 +48,32 @@ class ReplayBuffer:
     def get_episode(self):
 
         index = self.current_mem%self.mem_size
-        observation = torch.Tensor(self.observation[:index])
-        action = torch.Tensor(self.action[:index])
-        reward = torch.Tensor(self.reward[:index])
-        next_observation = torch.Tensor(self.next_observation[:index])
-        done = torch.Tensor(self.done[:index])
+        observation = []
+        action = []
+        reward = []
+        next_observation = []
+        done = []
+        for idx in range(index):
+            observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
+
+            if self.action_space == "discrete":
+                action.append(torch.hstack([torch.Tensor([act]).to(torch.int64) for act in self.action[idx].values()]))
+            else:
+                action.append(torch.hstack([torch.Tensor(act) for act in self.action[idx].values()]))
+
+            if self.reward_type == "global":
+                reward.append(torch.Tensor([self.reward[idx]]))
+            else:
+                reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
+
+            next_observation.append(torch.hstack([torch.Tensor(nxt_obs) for nxt_obs in self.next_observation[idx].values()]))
+            done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
+        
+        observation = torch.vstack(observation)
+        action = torch.vstack(action)
+        reward = torch.vstack(reward)
+        next_observation = torch.vstack(next_observation)
+        done = torch.vstack(done)
 
         return (observation,action,reward,next_observation,done)
 
