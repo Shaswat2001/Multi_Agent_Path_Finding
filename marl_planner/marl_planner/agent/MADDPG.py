@@ -76,7 +76,7 @@ class MADDPG:
             self.QOptimizer[agent].step()
 
             # actions = self.PolicyNetwork(state)
-            critic_value = self.Qnetwork[agent](state,torch.hstack(actions_list))
+            critic_value = self.Qnetwork[agent](observation,torch.hstack(actions_list))
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.mean().backward()

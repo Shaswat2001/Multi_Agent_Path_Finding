@@ -55,9 +55,9 @@ def train(args,env,trainer):
                 break
                 
             else:
-                trainer.add(observation,action,reward,next_observation,termination)
+                trainer.add(state,observation,action,reward,next_state,next_observation,termination)
             
-            if args.Algorithm in ["MADDPG","MASoftQ","VDN","MATD3"]:
+            if args.Algorithm in ["MADDPG","MASoftQ","VDN","MATD3","QMIX"]:
                 trainer.learn()
 
             observation = next_observation

@@ -11,7 +11,7 @@ def build_parse():
     parser.add_argument("max_action",nargs="?",type=float,default=[],help="Max possible value of action")
     parser.add_argument("min_action",nargs="?",type=float,default=[],help="Min possible value of action")
 
-    parser.add_argument("Algorithm",nargs="?",type=str,default="MATD3",help="Name of RL algorithm")
+    parser.add_argument("Algorithm",nargs="?",type=str,default="QMIX",help="Name of RL algorithm")
     parser.add_argument('tau',nargs="?",type=float,default=0.005)
     parser.add_argument('gamma',nargs="?",default=0.99)
     parser.add_argument('actor_lr',nargs="?",type=float,default=0.0001,help="Learning rate of Policy Network")
@@ -97,8 +97,12 @@ def get_qmix_args(args):
 
     args.rnn_hidden = 64
     args.policy_hidden = 64
+    args.mixer_hidden = 128
     
     args.grad_norm_clip = 10
+
+    args.epsilon = 1.0
+    args.epsilon_min = 0.05
 
     return args
 
@@ -108,6 +112,7 @@ def get_env_parameters(args,env):
     args.input_shape = {}
     args.n_actions = {}
     args.action_space = {}
+    args.state_shape = env.state_space.shape[0]
     args.max_action = {}
     args.min_action = {}
     args.env_agents = env.agents

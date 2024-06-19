@@ -100,8 +100,9 @@ class RNN(nn.Module):
         super(RNN,self).__init__()
 
         self.args = args
+        self.input_shape = args.input_shape[agent]
         self.actionNet =  nn.Sequential(
-            nn.Linear(args.input_shape[agent],args.rnn_hidden),
+            nn.Linear(self.input_shape,args.rnn_hidden),
             nn.ReLU()
         )
         self.rnnNet = nn.GRUCell(args.rnn_hidden,args.rnn_hidden)
@@ -109,7 +110,8 @@ class RNN(nn.Module):
         self.qNet = nn.Linear(args.rnn_hidden,args.n_actions[agent])
 
     def forward(self,obs,hidden_unit):
-
+        
+        obs = obs.reshape(-1,self.input_shape)
         x = self.actionNet(obs)
         h_in = hidden_unit.reshape(-1,self.args.rnn_hidden)
         h = self.rnnNet(x,h_in)

@@ -43,13 +43,12 @@ class QMIX:
 
             obs = torch.Tensor(observation[agent])
             qval,self.policy_hidden[:,ai,:] = self.PolicyNetwork[agent](obs,self.policy_hidden[:,ai,:])
-
             if stage == "training" and np.random.normal() < self.epsilon:
 
                 act = np.random.choice(self.action_space)
                 action[agent] = act
             else:
-                action[agent] = int(qval.argmax(dim = 0).detach().numpy())
+                action[agent] = int(qval.argmax(dim = 1).detach().numpy())
         
         return action
     
@@ -79,8 +78,10 @@ class QMIX:
             next_obs_i = next_observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
             action_i = action[:,ai].view(-1,1)
 
-            qval = self.PolicyNetwork[agent](obs_i,self.policy_hidden[:,ai,:]).gather(1,action_i)
-            next_qval,_ = self.TargetPolicyNetwork[agent](next_obs_i,self.target_policy_hidden[:,ai,:]).max(1,keepdims = True)
+            qval,_ = self.PolicyNetwork[agent](obs_i,self.policy_hidden[:,ai,:])
+            qval = qval.gather(1,action_i)
+            next_qval,_ = self.TargetPolicyNetwork[agent](next_obs_i,self.target_policy_hidden[:,ai,:])
+            next_qval,_ = next_qval.max(1,keepdims = True)
 
             q_values.append(qval)
             target_q_values.append(next_qval)
@@ -141,10 +142,15 @@ class QMIX:
         print("-------SAVING NETWORK -------")
 
         os.makedirs("config/saves/training_weights/"+ env + f"/qmix_weights/", exist_ok=True)
-        torch.save(self.PolicyNetwork.state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights/actorWeights.pth")
-        torch.save(self.TargetPolicyNetwork.state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights/TargetactorWeights.pth")
+
+        for agent in self.args.env_agents:
+            os.makedirs("config/saves/training_weights/"+ env + f"/qmix_weights/{agent}", exist_ok=True)
+            torch.save(self.PolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights//{agent}/actorWeights.pth")
+            torch.save(self.TargetPolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights/{agent}/QWeights.pth")
 
     def load(self,env):
 
-        self.PolicyNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/qmix_weights/actorWeights.pth",map_location=torch.device('cpu')))
-        self.TargetPolicyNetwork.load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/qmix_weights/TargetactorWeights.pth",map_location=torch.device('cpu')))
+        for agent in self.args.env_agents:
+
+            self.PolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/qmix_weights//{agent}/actorWeights.pth",map_location=torch.device('cpu')))
+            self.TargetPolicyNetwork[agent].load_state_dict(torch.load("config/saves/training_weights/"+ env + f"/qmix_weights/{agent}/TargetactorWeights.pth",map_location=torch.device('cpu')))
