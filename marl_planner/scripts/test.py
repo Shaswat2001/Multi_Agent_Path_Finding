@@ -4,7 +4,7 @@ env = simple_spread_v3.parallel_env(N=3, local_ratio=0.5, max_cycles=25)
 
 observation, infos = env.reset(seed=42)
 print(observation)
-print(env.state_space.sample())
+print(env.state().shape)
 print(env.observation_space(env.agents[0]))
 obs_n = []
 print(env.action_space(env.agents[0]).sample())

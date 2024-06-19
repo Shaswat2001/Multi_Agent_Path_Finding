@@ -46,7 +46,7 @@ class MASoftQ:
         if self.learning_step<self.args.batch_size:
             return
 
-        state,action,reward,next_state,done = self.replay_buffer.shuffle()
+        _,observation,action,reward,_,next_observation,done = self.replay_buffer.shuffle()
 
         target_action_list = []
         actions_list = []
@@ -54,24 +54,24 @@ class MASoftQ:
         for ai in range(len(self.args.env_agents)):
 
             agent = self.args.env_agents[ai]
-            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
-            next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_obs_i = next_observation[:,ai*self.action_space:(ai+1)*self.action_space]
 
-            target_critic_action = self.TargetPolicyNetwork[agent](next_state_i)
-            target_action = self.PolicyNetwork[agent](state_i)
+            target_critic_action = self.TargetPolicyNetwork[agent](next_obs_i)
+            target_action = self.PolicyNetwork[agent](obs_i)
             target_action_list.append(target_critic_action)
             actions_list.append(target_action)
         
-        target_q = self.TargetQNetwork(next_state,torch.hstack(target_action_list))
+        target_q = self.TargetQNetwork(next_observation,torch.hstack(target_action_list))
         target_v = torch.logsumexp(target_q, dim=1,keepdim=True)
         y = reward.sum(dim = 1, keepdim=True) + self.args.gamma*target_v
-        critic_value = self.Qnetwork(state,action)
+        critic_value = self.Qnetwork(observation,action)
         critic_loss = torch.mean(torch.square(y - critic_value),dim=1)
         self.QOptimizer.zero_grad()
         critic_loss.mean().backward()
         self.QOptimizer.step()
             
-        critic_value = self.Qnetwork(state,torch.hstack(actions_list))
+        critic_value = self.Qnetwork(observation,torch.hstack(actions_list))
         actor_loss = -critic_value.mean()
         self.PolicyOptimizer.zero_grad()
         actor_loss.mean().backward()

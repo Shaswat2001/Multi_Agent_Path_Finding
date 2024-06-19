@@ -37,13 +37,12 @@ class QMIX:
 
         action = {}
 
-        self.init_rnn_hidden(1)
         for ai in range(len(self.args.env_agents)):
             
             agent = self.args.env_agents[ai]
 
-            state = torch.Tensor(observation[agent])
-            qval = self.PolicyNetwork[agent](state,self.policy_hidden[:,ai,:])
+            obs = torch.Tensor(observation[agent])
+            qval,self.policy_hidden[:,ai,:] = self.PolicyNetwork[agent](obs,self.policy_hidden[:,ai,:])
 
             if stage == "training" and np.random.normal() < self.epsilon:
 
@@ -67,7 +66,7 @@ class QMIX:
         if self.learning_step<self.args.batch_size:
             return
         
-        state,action,reward,next_state,_ = self.replay_buffer.shuffle()
+        state,observation,action,reward,next_state,next_observation,_ = self.replay_buffer.shuffle()
         q_values = []
         target_q_values = []
 
@@ -76,18 +75,18 @@ class QMIX:
 
             agent = self.args.env_agents[ai]
 
-            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
-            next_state_i = next_state[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_obs_i = next_observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
             action_i = action[:,ai].view(-1,1)
 
-            qval = self.PolicyNetwork[agent](state_i).gather(1,action_i)
-            next_qval,_ = self.TargetPolicyNetwork[agent](next_state_i).max(1,keepdims = True)
+            qval = self.PolicyNetwork[agent](obs_i,self.policy_hidden[:,ai,:]).gather(1,action_i)
+            next_qval,_ = self.TargetPolicyNetwork[agent](next_obs_i,self.target_policy_hidden[:,ai,:]).max(1,keepdims = True)
 
             q_values.append(qval)
             target_q_values.append(next_qval)
 
-        q_tot = self.Qmixer(torch.hstack(q_values))
-        q_tot_target = self.TargetQmixer(torch.hstack(target_q_values))
+        q_tot = self.Qmixer(state,torch.hstack(q_values))
+        q_tot_target = self.TargetQmixer(next_state,torch.hstack(target_q_values))
 
         y = reward + self.args.gamma*q_tot_target
         critic_loss = torch.mean(torch.square(y.detach() - q_tot),dim=1)
@@ -98,18 +97,11 @@ class QMIX:
         if self.learning_step%self.args.target_update == 0:                
             self.network_soft_updates()
 
-    def add(self,s,action,rwd,next_state,done):
+        self.init_rnn_hidden(1)
 
-        self.replay_buffer.store(s,action,rwd,next_state,done)
+    def add(self,state,observation,action,reward,next_state,next_observation,done):
 
-    def get_critic_input(self,id,observation,action):
-
-        observations = torch.hstack(list(observation.values()))
-        batch_size = observations.shape[0]
-        id = (torch.ones(batch_size)*id).view(-1,1)
-        action = torch.hstack(list(action.values()))
-
-        return torch.concatenate((id,observations,action),dim=-1)
+        self.replay_buffer.store(state,observation,action,reward,next_state,next_observation,done)
 
     def reset(self):
 
@@ -130,7 +122,7 @@ class QMIX:
         self.policy_parameters += self.Qmixer.parameters()
 
         self.Optimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.critic_lr)
-
+        self.init_rnn_hidden(1)
         self.network_hard_updates()
     
     def network_hard_updates(self):

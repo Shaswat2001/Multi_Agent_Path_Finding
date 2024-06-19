@@ -19,7 +19,7 @@ class ReplayBuffer:
         self.done = [0]*self.mem_size
         self.batch_size = args.batch_size
 
-    def store(self,observation,action,reward,next_observation,done):
+    def store(self,state,observation,action,reward,next_state,next_observation,done):
 
         if self.current_mem < self.mem_size:
             
@@ -27,9 +27,11 @@ class ReplayBuffer:
         else:
             index = self.current_mem%self.mem_size
 
+        self.state[index] = state
         self.observation[index] = observation
         self.action[index] = action
         self.reward[index] = reward
+        self.next_state[index] = next_state
         self.next_observation[index] = next_observation
         self.done[index] = done
         self.current_mem+=1
@@ -48,12 +50,16 @@ class ReplayBuffer:
     def get_episode(self):
 
         index = self.current_mem%self.mem_size
+        state = []
         observation = []
         action = []
         reward = []
+        next_state = []
         next_observation = []
         done = []
         for idx in range(index):
+
+            state.append(torch.hstack([torch.Tensor(st) for st in self.state[idx].values()]))
             observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
 
             if self.action_space == "discrete":
@@ -66,16 +72,19 @@ class ReplayBuffer:
             else:
                 reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
 
+            next_state.append(torch.hstack([torch.Tensor(n_st) for n_st in self.next_state[idx].values()]))
             next_observation.append(torch.hstack([torch.Tensor(nxt_obs) for nxt_obs in self.next_observation[idx].values()]))
             done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
         
+        state = torch.vstack(state)
         observation = torch.vstack(observation)
         action = torch.vstack(action)
         reward = torch.vstack(reward)
+        next_state = torch.vstack(next_state)
         next_observation = torch.vstack(next_observation)
         done = torch.vstack(done)
 
-        return (observation,action,reward,next_observation,done)
+        return (state,observation,action,reward,next_state,next_observation,done)
 
     def shuffle(self):
         max_mem = min(self.mem_size, self.current_mem)

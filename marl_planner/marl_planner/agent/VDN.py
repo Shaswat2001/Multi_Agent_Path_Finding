@@ -54,7 +54,7 @@ class VDN:
         if self.learning_step<self.args.batch_size:
             return
         
-        state,action,reward,next_state,_ = self.replay_buffer.shuffle()
+        _,observation,action,reward,_,next_observation,_ = self.replay_buffer.shuffle()
         q_values = []
         target_q_values = []
 
@@ -62,12 +62,12 @@ class VDN:
 
             agent = self.args.env_agents[ai]
 
-            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
-            next_state_i = next_state[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_obs_i = next_observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape] 
             action_i = action[:,ai].view(-1,1)
 
-            qval = self.PolicyNetwork[agent](state_i).gather(1,action_i)
-            next_qval,_ = self.TargetPolicyNetwork[agent](next_state_i).max(1,keepdims = True)
+            qval = self.PolicyNetwork[agent](obs_i).gather(1,action_i)
+            next_qval,_ = self.TargetPolicyNetwork[agent](next_obs_i).max(1,keepdims = True)
 
             q_values.append(qval)
             target_q_values.append(next_qval)

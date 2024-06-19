@@ -28,10 +28,11 @@ def train(args,env,trainer):
         
         while True:
 
+            state = env.state()
             action = trainer.choose_action(observation)
 
             next_observation,rwd,termination,truncation,info = env.step(action)
-
+            next_state = env.state()
             global_reward += sum(list(rwd.values()))
 
             if args.Algorithm in ["VDN","QMIX"]:
@@ -45,7 +46,7 @@ def train(args,env,trainer):
                 for key in termination.keys():
                     done[key] = True
                 
-                trainer.add(observation,action,reward,next_observation,done)
+                trainer.add(state,observation,action,reward,next_state,next_observation,done)
 
                 if args.Algorithm in ["COMA"]:
                     if i%args.train_network == 0:
