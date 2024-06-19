@@ -14,7 +14,8 @@ class MASoftQ:
 
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
-        # Replay Buffer provided by the user
+        self.obs_shape = self.args.input_shape[self.args.env_agents[0]]
+        self.action_space = self.args.n_actions[self.args.env_agents[0]]
         self.policy = policy
 
         self.reset()
@@ -52,9 +53,7 @@ class MASoftQ:
 
             agent = self.args.env_agents[ai]
             state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
-            reward_i = reward[:,ai]
             next_state_i = next_state[:,ai*self.action_space:(ai+1)*self.action_space]
-            done_i = done[:,ai]
 
             target_action_list = []
             actions_list = []
@@ -86,12 +85,11 @@ class MASoftQ:
 
     def add(self,s,action,rwd,next_state,done):
 
-        for agent in self.args.env_agents:
-            self.replay_buffer[agent].store(s[agent],action[agent],rwd[agent],next_state[agent],done[agent])
+        self.replay_buffer.store(s,action,rwd,next_state,done)
 
     def reset(self):
 
-        self.replay_buffer = {agent:ReplayBuffer(self.args,agent) for agent in self.args.env_agents}
+        self.replay_buffer = ReplayBuffer(self.args,reward_type = "ind",action_space="continuous")
         # Exploration Technique
         self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         

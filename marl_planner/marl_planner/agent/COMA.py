@@ -41,11 +41,13 @@ class COMA:
             
             state = torch.Tensor(observation[agent])
             probability = self.PolicyNetwork[agent](state)
-            if stage == "training":
-                int_action = torch.multinomial(probability,1)
-                action[agent] = int_action[0].detach().numpy()
+
+            if stage == "training" and np.random.normal() < self.epsilon:
+
+                act = np.random.choice(self.action_space)
+                action[agent] = act
             else:
-                action[agent] = onehot_from_logits(probability,eps = self.epsilon).detach().numpy()
+                action[agent] = int(probability.argmax(dim = 0).detach().numpy())
         
         return action
     

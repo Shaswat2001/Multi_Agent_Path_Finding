@@ -69,7 +69,7 @@ class ReplayBuffer:
             observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
 
             if self.action_space == "discrete":
-                action.append(torch.hstack([torch.Tensor([act]) for act in self.action[idx].values()]))
+                action.append(torch.hstack([torch.Tensor([act]).to(torch.int64) for act in self.action[idx].values()]))
             else:
                 action.append(torch.hstack([torch.Tensor(act) for act in self.action[idx].values()]))
 
@@ -82,7 +82,7 @@ class ReplayBuffer:
             done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
         
         observation = torch.vstack(observation)
-        action = torch.vstack(action).to(torch.int64)
+        action = torch.vstack(action)
         reward = torch.vstack(reward)
         next_observation = torch.vstack(next_observation)
         done = torch.vstack(done)
