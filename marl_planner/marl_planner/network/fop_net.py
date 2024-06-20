@@ -4,55 +4,61 @@ import torch.nn.functional as F
 
 class FOPVNetwork(nn.Module):
 
-    def __init__(self,args):
+    def __init__(self,args,agent):
         super(FOPVNetwork,self).__init__()
 
         self.args = args
+        self.stateNet = nn.Sequential(
+            nn.Linear(args.input_shape[agent],args.vnet_hidden),
+            nn.ReLU(),
+            nn.Linear(args.vnet_hidden,args.vnet_hidden//4),
+            nn.ReLU(),
+            nn.Linear(args.vnet_hidden//4,1)
+        )
 
-        self.state_shape = self.args.state_shape
-        self.mixer_hidden = self.args.mixer_hidden
-        self.n_agents = self.args.n_agents
+    def forward(self,state):
 
-        self.W1Net = nn.Linear(self.state_shape,self.mixer_hidden*self.n_agents)
-        self.b1Net = nn.Linear(self.state_shape,self.mixer_hidden)
-
-        self.W2Net = nn.Linear(self.state_shape,self.mixer_hidden)
-        self.b2Net = nn.Sequential(
-                                nn.Linear(self.state_shape,self.mixer_hidden),
-                                nn.ReLU(),
-                                nn.Linear(self.mixer_hidden,1)
-                            )
-        
-    def forward(self,state,q_values):
-
-        batch_size = q_values.shape[0]
-
-        q_values = q_values.view(-1,1,self.n_agents)
-
-        W1 = torch.abs(self.W1Net(state))
-        b1 = self.b1Net(state)
-
-
-        W1 = W1.view(-1,self.n_agents,self.mixer_hidden)
-        b1 = b1.view(-1,1,self.mixer_hidden)
-
-        hid_val = F.elu(torch.bmm(q_values,W1)+b1)
-
-        W2 = torch.abs(self.W2Net(state))
-        b2 = self.b2Net(state)
-
-
-        W2 = W2.view(-1,self.mixer_hidden,1)
-        b2 = b2.view(-1,1,1)
-
-        q_total = torch.bmm(hid_val,W2)+b2
-        q_total = q_total.view(batch_size,-1,1)
-
-        return q_total
+        vVal = self.stateNet(state)
+        return vVal
     
 class FOPQNetwork(nn.Module):
 
-    def __init__(self,args):
+    def __init__(self,args,agent):
         super(FOPQNetwork,self).__init__()
 
         self.args = args
+        input_shape = args.input_shape[agent]
+        n_agents = args.n_agents
+        n_action = args.n_actions[agent]
+
+        self.stateNet = nn.Sequential(
+            nn.Linear(input_shape*n_agents,1024),
+            nn.ReLU(),
+            nn.Linear(1024,512),
+            nn.ReLU(),
+            nn.Linear(512,256),
+            nn.ReLU(),
+            nn.Linear(256,128),
+            nn.ReLU(),
+        )
+
+        self.actionNet = nn.Sequential(
+            nn.Linear(n_action*n_agents,128),
+            nn.ReLU(),
+        )
+
+        self.QNet = nn.Sequential(
+            nn.Linear(256,512),
+            nn.ReLU(),
+            nn.Linear(512,512),
+            nn.ReLU(),
+            nn.Linear(512,1)
+        )
+
+    def forward(self,state,action):
+        
+        stateProcess = self.stateNet(state)
+        actionProcess = self.actionNet(action)
+        ipt = torch.cat((stateProcess,actionProcess),dim=1)
+        Qval = self.QNet(ipt)
+        return Qval

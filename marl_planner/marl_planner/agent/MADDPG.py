@@ -50,7 +50,7 @@ class MADDPG:
 
             _,observation,action,reward,_,next_observation,done = self.replay_buffer.shuffle()
             agent = self.args.env_agents[ai]
-
+            print(observation.shape)
             reward_i = reward[:,ai].view(-1,1)
             done_i = done[:,ai].view(-1,1)
 
@@ -85,9 +85,9 @@ class MADDPG:
         if self.learning_step%self.args.target_update == 0:                
             self.network_soft_updates()
 
-    def add(self,s,action,rwd,next_state,done):
+    def add(self,state,observation,action,reward,next_state,next_observation,done):
 
-        self.replay_buffer.store(s,action,rwd,next_state,done)
+        self.replay_buffer.store(state,observation,action,reward,next_state,next_observation,done)
 
     def reset(self):
 
