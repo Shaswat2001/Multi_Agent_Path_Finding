@@ -4,12 +4,20 @@ import torch.nn.functional as F
 
 class FOPVNetwork(nn.Module):
 
-    def __init__(self,args,agent):
+    def __init__(self,args,agent = None,type = None):
         super(FOPVNetwork,self).__init__()
 
         self.args = args
+        n_agents = args.n_agents
+
+        if type is not None:
+            agent = list(args.input_shape.keys())[0]
+            input_shape = args.input_shape[agent]*n_agents
+        else:
+            input_shape = args.input_shape[agent]
+
         self.stateNet = nn.Sequential(
-            nn.Linear(args.input_shape[agent],args.vnet_hidden),
+            nn.Linear(input_shape,args.vnet_hidden),
             nn.ReLU(),
             nn.Linear(args.vnet_hidden,args.vnet_hidden//4),
             nn.ReLU(),
@@ -65,10 +73,11 @@ class FOPQNetwork(nn.Module):
     
 class FOPWeightedNetwork(nn.Module):
 
-    def __init__(self,args,agent):
+    def __init__(self,args):
         super(FOPWeightedNetwork,self).__init__()
 
         self.args = args
+        agent = list(args.input_shape.keys())[0]
         input_shape = args.input_shape[agent]
         n_agents = args.n_agents
         n_action = args.n_actions[agent]

@@ -91,33 +91,43 @@ class FOP:
         self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
-
-        self.policy_parameters = []
-
-        for policy in self.PolicyNetwork.values():
-
-            self.policy_parameters += policy.parameters()
-
-        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.actor_lr)
-
+        self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
         self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
 
-        self.Qnetwork = MASoftQCritic(self.args)
-        self.QOptimizer = torch.optim.Adam(self.Qnetwork.parameters(),lr=self.args.critic_lr)
-        self.TargetQNetwork = MASoftQCritic(self.args)
+        self.VNetwork = {agent:FOPVNetwork(self.args,agent) for agent in self.args.env_agents}
+        self.VOptimizer = {agent:torch.optim.Adam(self.Vnetwork[agent].parameters(),lr=self.args.critic_lr) for agent in self.args.env_agents}
+        self.TargetVNetwork = {agent:FOPVNetwork(self.args,agent) for agent in self.args.env_agents}
+
+        self.Qnetwork = {agent:FOPQNetwork(self.args,agent) for agent in self.args.env_agents}
+        self.TargetQNetwork = {agent:FOPQNetwork(self.args,agent) for agent in self.args.env_agents}
+        self.WeightedNetwork = FOPWeightedNetwork(self.args)
+        self.VnetworkJT = FOPVNetwork(self.args,None,"joint")
+
+        self.qnet_parameters = []
+
+        for qnet in self.Qnetwork.values():
+
+            self.qnet_parameters += qnet.parameters()
+
+        self.qnet_parameters += self.VnetworkJT.parameters()
+        self.qnet_parameters += self.WeightedNetwork.parameters()
+
+        self.QOptimizer = torch.optim.Adam(self.qnet_parameters,lr=self.args.critic_lr)
 
         self.network_hard_updates()
 
     def network_hard_updates(self):
 
-        hard_update(self.TargetQNetwork,self.Qnetwork)
         for agent in self.args.env_agents:
+            hard_update(self.TargetQNetwork[agent],self.Qnetwork[agent])
+            hard_update(self.TargetVNetwork[agent],self.VNetwork[agent])
             hard_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent])
     
     def network_soft_updates(self):
 
-        soft_update(self.TargetQNetwork,self.Qnetwork,self.args.tau)
         for agent in self.args.env_agents:
+            soft_update(self.TargetQNetwork[agent],self.Qnetwork[agent],self.args.tau)
+            soft_update(self.TargetVNetwork[agent],self.VNetwork[agent],self.args.tau)
             soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)
     
     def save(self,env):
