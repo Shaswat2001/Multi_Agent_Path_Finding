@@ -10,7 +10,7 @@ import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
-from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3
+from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3, FACMAC
 from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
@@ -35,7 +35,7 @@ def train(args,env,trainer):
             next_state = env.state()
             global_reward += sum(list(rwd.values()))
 
-            if args.Algorithm in ["VDN","QMIX"]:
+            if args.Algorithm in ["VDN","QMIX","FACMAC"]:
                 reward = global_reward
             else:
                 reward = rwd
@@ -57,7 +57,7 @@ def train(args,env,trainer):
             else:
                 trainer.add(state,observation,action,reward,next_state,next_observation,termination)
             
-            if args.Algorithm in ["MADDPG","MASoftQ","VDN","MATD3","QMIX"]:
+            if args.Algorithm in ["MADDPG","MASoftQ","VDN","MATD3","QMIX","FACMAC"]:
                 trainer.learn()
 
             observation = next_observation
@@ -97,16 +97,19 @@ if __name__=="__main__":
     else:
         args.is_continous = True
     
-    env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous)
-    # env = simple_v3.parallel_env(continuous_actions=args.is_continous)
+    # env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous)
+    env = simple_v3.parallel_env(continuous_actions=args.is_continous)
     env.reset()
 
-    get_env_parameters(args,env)
+    args = get_env_parameters(args,env)
     
     if args.Algorithm == "MADDPG":
         args = get_maddpg_args(args)
         trainer = MADDPG.MADDPG(args = args,policy = ContinuousMLP)
-    if args.Algorithm == "MATD3":
+    elif args.Algorithm == "FACMAC":
+        args = get_facmac_args(args)
+        trainer = FACMAC.FACMAC(args = args,policy = ContinuousMLP)
+    elif args.Algorithm == "MATD3":
         args = get_maddpg_args(args)
         trainer = MATD3.MATD3(args = args,policy = ContinuousMLP)
     elif args.Algorithm == "COMA":

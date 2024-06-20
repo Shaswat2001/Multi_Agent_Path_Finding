@@ -1,14 +1,15 @@
 import numpy as np
 import torch
 import os
-from marl_planner.network.maddpg_critic import MADDPGCritic
+from marl_planner.network.facmac_critic import FACMACCritic
 from marl_planner.common.exploration import OUActionNoise
+from marl_planner.network.qmix_net import QMixer
 from marl_planner.common.replay_buffer import ReplayBuffer
 from marl_planner.common.utils import hard_update,soft_update
 
-class MADDPG:
+class FACMAC:
     '''
-    MADDPG Algorithm 
+    FACMAC Algorithm 
     '''
     def __init__(self,args,policy):
 
@@ -45,41 +46,52 @@ class MADDPG:
 
         if self.learning_step<self.args.batch_size:
             return
+        
+        state,observation,action,reward,next_state,next_observation,_ = self.replay_buffer.shuffle()
+        q_values = []
+        target_q_values = []
 
         for ai in range(len(self.args.env_agents)):
 
-            _,observation,action,reward,_,next_observation,done = self.replay_buffer.shuffle()
             agent = self.args.env_agents[ai]
-            reward_i = reward[:,ai].view(-1,1)
-            done_i = done[:,ai].view(-1,1)
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            next_obs_i = next_observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            action_i = action[:,ai*self.action_space:(ai+1)*self.action_space]
 
-            target_action_list = []
-            actions_list = []
-            for aj in range(len(self.args.env_agents)):
+            target_critic_action = self.TargetPolicyNetwork[agent](next_obs_i)
 
-                agt = self.args.env_agents[aj]
-                obs_i = observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
-                next_obs_i = next_observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
+            qval = self.Qnetwork[agent](obs_i,action_i)
 
-                target_critic_action = self.TargetPolicyNetwork[agt](next_obs_i)
-                target_action = self.PolicyNetwork[agt](obs_i)
-                target_action_list.append(target_critic_action)
-                actions_list.append(target_action)
+            next_qval = self.TargetQNetwork[agent](next_obs_i,target_critic_action)
 
-            target = self.TargetQNetwork[agent](next_observation,torch.hstack(target_action_list))
-            y = reward_i + self.args.gamma*target*(1-done_i)
-            critic_value = self.Qnetwork[agent](observation,action)
-            critic_loss = torch.mean(torch.square(y.detach() - critic_value),dim=1)
-            self.QOptimizer[agent].zero_grad()
-            critic_loss.mean().backward()
-            self.QOptimizer[agent].step()
+            q_values.append(qval)
+            target_q_values.append(next_qval)
 
-            # actions = self.PolicyNetwork(state)
-            critic_value = self.Qnetwork[agent](observation,torch.hstack(actions_list))
-            actor_loss = -critic_value.mean()
-            self.PolicyOptimizer[agent].zero_grad()
-            actor_loss.mean().backward()
-            self.PolicyOptimizer[agent].step()
+        q_tot = self.Qmixer(state,torch.hstack(q_values))
+        q_tot_target = self.TargetQmixer(next_state,torch.hstack(target_q_values))
+
+        y = reward + self.args.gamma*q_tot_target
+        critic_loss = torch.mean(torch.square(y.detach() - q_tot),dim=1)
+        self.QOptimizer.zero_grad()
+        critic_loss.mean().backward()
+        self.QOptimizer.step()
+
+        q_values = []
+
+        for ai in range(len(self.args.env_agents)):
+
+            agent = self.args.env_agents[ai]
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+
+            critic_action = self.PolicyNetwork[agent](obs_i)
+            qval = self.Qnetwork[agent](obs_i,critic_action)
+            q_values.append(qval)
+
+        q_tot = self.Qmixer(state,torch.hstack(q_values))
+        actor_loss = -q_tot.mean()
+        self.PolicyOptimizer[agent].zero_grad()
+        actor_loss.mean().backward()
+        self.PolicyOptimizer[agent].step()
 
         if self.learning_step%self.args.target_update == 0:                
             self.network_soft_updates()
@@ -90,28 +102,45 @@ class MADDPG:
 
     def reset(self):
 
-        self.replay_buffer = ReplayBuffer(self.args,reward_type="ind",action_space="continuous")
+        self.replay_buffer = ReplayBuffer(self.args,reward_type="global",action_space="continuous")
         # Exploration Technique
         self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.3) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
-        self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
         self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
 
-        self.Qnetwork = {agent:MADDPGCritic(self.args,agent) for agent in self.args.env_agents}
-        self.QOptimizer = {agent:torch.optim.Adam(self.Qnetwork[agent].parameters(),lr=self.args.critic_lr) for agent in self.args.env_agents}
-        self.TargetQNetwork = {agent:MADDPGCritic(self.args,agent) for agent in self.args.env_agents}
+        self.Qnetwork = {agent:FACMACCritic(self.args,agent) for agent in self.args.env_agents}
+        self.TargetQNetwork = {agent:FACMACCritic(self.args,agent) for agent in self.args.env_agents}
 
+        self.Qmixer = QMixer(self.args)
+        self.TargetQmixer = QMixer(self.args)
+
+        self.qnet_parameters = []
+        self.policy_parameters = []
+        for qnet in self.Qnetwork.values():
+
+            self.qnet_parameters += qnet.parameters()
+
+        self.qnet_parameters += self.Qmixer.parameters()
+
+        for policy in self.PolicyNetwork.values():
+
+            self.policy_parameters += policy.parameters()
+
+        self.QOptimizer = torch.optim.Adam(self.qnet_parameters.parameters(),lr=self.args.critic_lr)
+        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters.parameters(),lr=self.args.actor_lr)
         self.network_hard_updates()
 
     def network_hard_updates(self):
 
+        hard_update(self.TargetQmixer,self.Qmixer)
         for agent in self.args.env_agents:
             hard_update(self.TargetQNetwork[agent],self.Qnetwork[agent])
             hard_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent])
     
     def network_soft_updates(self):
-
+        
+        hard_update(self.TargetQmixer,self.Qmixer,self.args.tau)
         for agent in self.args.env_agents:
             soft_update(self.TargetQNetwork[agent],self.Qnetwork[agent],self.args.tau)
             soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)

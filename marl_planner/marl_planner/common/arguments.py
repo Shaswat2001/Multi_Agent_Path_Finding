@@ -50,6 +50,18 @@ def get_maddpg_args(args):
 
     args.critic_hidden = 64
     args.policy_hidden = 64
+    
+    args.target_update = 2
+    
+    return args
+
+def get_facmac_args(args):
+
+    args.is_continous = True
+
+    args.critic_hidden = 64
+    args.policy_hidden = 64
+    args.mixer_hidden = 64
 
     args.target_update = 2
     
@@ -131,3 +143,5 @@ def get_env_parameters(args,env):
             args.input_shape[agent] = env.observation_space(agent).shape[0]
             args.n_actions[agent] = env.action_space(agent).n 
             args.action_space[agent] = 1
+
+    return args

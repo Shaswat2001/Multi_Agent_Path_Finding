@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import os
-from marl_planner.network.masoftq_critic import MASoftQCritic
+from marl_planner.network.fop_net import FOPQNetwork,FOPVNetwork,FOPWeightedNetwork
 from marl_planner.common.exploration import OUActionNoise
 from marl_planner.common.replay_buffer import ReplayBuffer
 from marl_planner.common.utils import hard_update,soft_update

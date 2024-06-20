@@ -62,3 +62,37 @@ class FOPQNetwork(nn.Module):
         ipt = torch.cat((stateProcess,actionProcess),dim=1)
         Qval = self.QNet(ipt)
         return Qval
+    
+class FOPWeightedNetwork(nn.Module):
+
+    def __init__(self,args,agent):
+        super(FOPWeightedNetwork,self).__init__()
+
+        self.args = args
+        input_shape = args.input_shape[agent]
+        n_agents = args.n_agents
+        n_action = args.n_actions[agent]
+
+        self.stateNet = nn.Sequential(
+            nn.Linear(input_shape*n_agents,128),
+            nn.ReLU(),
+        )
+
+        self.actionNet = nn.Sequential(
+            nn.Linear(n_action*n_agents,128),
+            nn.ReLU(),
+        )
+
+        self.QNet = nn.Sequential(
+            nn.Linear(256,512),
+            nn.ReLU(),
+            nn.Linear(512,1)
+        )
+
+    def forward(self,state,action):
+        
+        stateProcess = self.stateNet(state)
+        actionProcess = self.actionNet(action)
+        ipt = torch.cat((stateProcess,actionProcess),dim=1)
+        Qval = self.QNet(ipt)
+        return Qval
