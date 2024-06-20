@@ -7,6 +7,7 @@ from torch.autograd import Variable
 EPS = 1e-8
 
 PolicyOps = namedtuple('PolicyOps', 'action log_prob entropy pi reg_pi specific_log_prob')
+PolicyOpsCont = namedtuple('PolicyOpsCont', 'raw_mean mean log_std pi log_prob_pi')
 
 def soft_update(target,source, tau):
 

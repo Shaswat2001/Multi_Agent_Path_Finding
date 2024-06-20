@@ -55,10 +55,10 @@ class DiscreteMLP(nn.Module):
 
         return action
     
-class GaussianNet(nn.Module):
+class DiscreteGaussianNet(nn.Module):
 
     def __init__(self, args,agent):
-        super(GaussianNet,self).__init__()
+        super(DiscreteGaussianNet,self).__init__()
 
         self.args = args
         self.actionNet =  nn.Sequential(
@@ -93,6 +93,55 @@ class GaussianNet(nn.Module):
         output = PolicyOps(action=action, log_prob=log_prob, entropy=entropy, pi=out, reg_pi=regularise_action, specific_log_prob=specific_log_prob)
 
         return output
+    
+class ContGaussianNet(nn.Module):
+
+    def __init__(self, args,agent):
+        super(ContGaussianNet,self).__init__()
+
+        self.args = args
+        self.input_shape = args.input_shape[agent]
+        self.n_actions = args.n_actions[agent]
+        self.log_std_min = args.log_std_min[agent]
+        self.log_std_max = args.log_std_max[agent]
+        self.act_lim = torch.tensor(args.bound,dtype=torch.float32)
+
+        self.actorNet = nn.Sequential(
+            nn.Linear(self.n_actions,256),
+            nn.ReLU(),
+            nn.Linear(256,256),
+            nn.ReLU(),
+        )
+
+        self.meanNet = nn.Sequential(
+            nn.Linear(256,self.n_actions)
+        )
+
+        self.stdNet = nn.Sequential(
+            nn.Linear(256,self.n_actions)
+        )
+    
+    def forward(self,state):
+
+        X = self.actorNet(state)
+        mean = self.meanNet(X)
+        log_std = self.stdNet(X)
+        log_std = torch.tanh(log_std.detach())
+        log_std = Squash(in_min=-1, in_max=1, out_min=self.log_std_min, out_max=self.log_std_max)(log_std)
+        pi = DiagonalGaussianSample()(mean=mean, log_std=log_std)
+        tanh_pi = torch.tanh(pi)
+        log_prob_tanh_pi = TanhDiagonalGaussianLogProb()(gaussian_samples=pi,
+                                                            tanh_gaussian_samples=tanh_pi,
+                                                            mean=mean,
+                                                            log_std=log_std)
+        tanh_mean = torch.tanh(mean)
+        scaled_tanh_pi = tanh_pi * self.act_lim
+        scaled_tanh_mean = tanh_mean * self.act_lim
+
+        output = PolicyOpsCont(raw_mean=mean, mean=scaled_tanh_mean,log_std=log_std, pi=scaled_tanh_pi, log_prob_pi=log_prob_tanh_pi)
+
+        return output
+
 
 class RNN(nn.Module):
 
