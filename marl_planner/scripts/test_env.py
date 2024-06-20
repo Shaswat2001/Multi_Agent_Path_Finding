@@ -39,8 +39,8 @@ if __name__=="__main__":
     else:
         args.is_continous = True
 
-    env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous,render_mode="human")
-    # env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
+    # env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous,render_mode="human")
+    env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
     env.reset()
 
     get_env_parameters(args,env)

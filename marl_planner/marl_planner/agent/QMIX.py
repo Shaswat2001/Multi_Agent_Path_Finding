@@ -146,7 +146,7 @@ class QMIX:
         for agent in self.args.env_agents:
             os.makedirs("config/saves/training_weights/"+ env + f"/qmix_weights/{agent}", exist_ok=True)
             torch.save(self.PolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights//{agent}/actorWeights.pth")
-            torch.save(self.TargetPolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights/{agent}/QWeights.pth")
+            torch.save(self.TargetPolicyNetwork[agent].state_dict(),"config/saves/training_weights/"+ env + f"/qmix_weights/{agent}/TargetactorWeights.pth")
 
     def load(self,env):
 

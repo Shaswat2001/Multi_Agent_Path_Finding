@@ -97,7 +97,7 @@ def get_qmix_args(args):
 
     args.rnn_hidden = 64
     args.policy_hidden = 64
-    args.mixer_hidden = 128
+    args.mixer_hidden = 64
     
     args.grad_norm_clip = 10
 
