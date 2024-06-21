@@ -55,7 +55,6 @@ class MADDPG:
             done_i = done[:,ai].view(-1,1)
 
             target_action_list = []
-            actions_list = []
             for aj in range(len(self.args.env_agents)):
 
                 agt = self.args.env_agents[aj]

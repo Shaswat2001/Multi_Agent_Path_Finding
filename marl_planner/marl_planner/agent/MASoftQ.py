@@ -70,7 +70,7 @@ class MASoftQ:
         self.QOptimizer.zero_grad()
         critic_loss.mean().backward()
         self.QOptimizer.step()
-            
+        
         critic_value = self.Qnetwork(observation,torch.hstack(actions_list))
         actor_loss = -critic_value.mean()
         self.PolicyOptimizer.zero_grad()

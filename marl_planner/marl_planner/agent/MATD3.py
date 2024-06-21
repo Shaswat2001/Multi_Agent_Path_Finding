@@ -53,19 +53,16 @@ class MATD3:
 
             reward_i = reward[:,ai].view(-1,1)
             done_i = done[:,ai].view(-1,1)
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
 
             target_action_list = []
-            actions_list = []
             for aj in range(len(self.args.env_agents)):
 
                 agt = self.args.env_agents[aj]
-                obs_i = observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
                 next_obs_i = next_observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
 
                 target_critic_action = self.TargetPolicyNetwork[agt](next_obs_i)
-                target_action = self.PolicyNetwork[agt](obs_i)
                 target_action_list.append(target_critic_action)
-                actions_list.append(target_action)
 
             target1 = self.TargetQNetwork1[agent](next_observation,torch.hstack(target_action_list))
             target2 = self.TargetQNetwork2[agent](next_observation,torch.hstack(target_action_list))
@@ -82,8 +79,8 @@ class MATD3:
             critic_loss.mean().backward()
             self.QOptimizer2[agent].step()
 
-            # actions = self.PolicyNetwork(state)
-            critic_value = self.Qnetwork1[agent](observation,torch.hstack(actions_list))
+            action[:,ai*self.action_space:(ai+1)*self.action_space] = self.PolicyNetwork[agent](obs_i)
+            critic_value = self.Qnetwork1[agent](observation,action)
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.mean().backward()
