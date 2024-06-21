@@ -63,7 +63,7 @@ class COMA:
 
     def learn(self):
         
-        state,action,reward,next_state,done = self.replay_buffer.get_episode()
+        _,observation,action,reward,_,next_observation,done = self.replay_buffer.get_episode()
 
         for ai in range(len(self.args.env_agents)):
             
@@ -71,7 +71,7 @@ class COMA:
 
             reward_i = reward[:,ai].view(-1,1)
             done_i = done[:,ai].view(-1,1)
-            state_i = state[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
+            state_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
             action_i = action[:,ai].view(-1,1)
             distribution_i = self.PolicyNetwork[agent](state_i)
 
@@ -126,7 +126,6 @@ class COMA:
 
     def get_correct_distribution(self,distribution_agent,action):
 
-
         rows = torch.arange(distribution_agent.shape[0])
         cols = action.squeeze()
 
@@ -134,9 +133,9 @@ class COMA:
 
         return distribution_agent
 
-    def add(self,s,action,rwd,next_state,done):
+    def add(self,state,observation,action,reward,next_state,next_observation,done):
 
-        self.replay_buffer.store(s,action,rwd,next_state,done)
+        self.replay_buffer.store(state,observation,action,reward,next_state,next_observation,done)
 
     def get_critic_input(self,id,observation,action):
 

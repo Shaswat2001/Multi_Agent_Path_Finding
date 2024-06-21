@@ -10,8 +10,8 @@ import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
-from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN
-from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN
+from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3, FACMAC, FOP
+from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN, ContGaussianNet
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
 def train(args,env,trainer):
@@ -43,11 +43,17 @@ if __name__=="__main__":
     env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
     env.reset()
 
-    get_env_parameters(args,env)
+    args = get_env_parameters(args,env)
     
     if args.Algorithm == "MADDPG":
         args = get_maddpg_args(args)
         trainer = MADDPG.MADDPG(args = args,policy = ContinuousMLP)
+    elif args.Algorithm == "FACMAC":
+        args = get_facmac_args(args)
+        trainer = FACMAC.FACMAC(args = args,policy = ContinuousMLP)
+    elif args.Algorithm == "MATD3":
+        args = get_maddpg_args(args)
+        trainer = MATD3.MATD3(args = args,policy = ContinuousMLP)
     elif args.Algorithm == "COMA":
         args = get_coma_args(args)
         trainer = COMA.COMA(args = args,policy = DiscreteMLP)
@@ -63,5 +69,8 @@ if __name__=="__main__":
     elif args.Algorithm == "VDN":
         args = get_vdn_args(args)
         trainer = VDN.VDN(args = args)
+    elif args.Algorithm == "FOP":
+        args = get_facmac_args(args)
+        trainer = FOP.FOP(args = args,policy = ContGaussianNet)
 
     train(args,env,trainer)

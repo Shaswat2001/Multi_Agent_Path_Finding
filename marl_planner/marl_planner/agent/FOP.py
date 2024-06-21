@@ -26,13 +26,8 @@ class FOP:
         for agent in self.args.env_agents:
 
             state = torch.Tensor(observation[agent])
-            if stage == "training":
-                
-                act_n = self.PolicyNetwork[agent](state).detach().numpy()
-                act_n += self.noiseOBJ[agent]()
-            else:
-                act_n = self.TargetPolicyNetwork[agent](state).detach().numpy()
-
+            obs = self.PolicyNetwork(state)
+            act_n = obs.pi.detach().numpy()
             act_n = np.clip(act_n,self.args.min_action[agent],self.args.max_action[agent])
         
             action[agent] = act_n
@@ -86,13 +81,10 @@ class FOP:
 
     def reset(self):
 
-        self.replay_buffer = ReplayBuffer(self.args,reward_type = "ind",action_space="continuous")
-        # Exploration Technique
-        self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.04) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
+        self.replay_buffer = ReplayBuffer(self.args,reward_type = "global",action_space="continuous")
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
         self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
-        self.TargetPolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
 
         self.VNetwork = {agent:FOPVNetwork(self.args,agent) for agent in self.args.env_agents}
         self.VOptimizer = {agent:torch.optim.Adam(self.Vnetwork[agent].parameters(),lr=self.args.critic_lr) for agent in self.args.env_agents}
@@ -121,14 +113,12 @@ class FOP:
         for agent in self.args.env_agents:
             hard_update(self.TargetQNetwork[agent],self.Qnetwork[agent])
             hard_update(self.TargetVNetwork[agent],self.VNetwork[agent])
-            hard_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent])
     
     def network_soft_updates(self):
 
         for agent in self.args.env_agents:
             soft_update(self.TargetQNetwork[agent],self.Qnetwork[agent],self.args.tau)
             soft_update(self.TargetVNetwork[agent],self.VNetwork[agent],self.args.tau)
-            soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)
     
     def save(self,env):
         print("-------SAVING NETWORK -------")

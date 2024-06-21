@@ -10,8 +10,8 @@ import copy
 import matplotlib.pyplot as plt
 # sys.path.insert(0, '/Users/shaswatgarg/Documents/WaterlooMASc/StateSpaceUAV')
 from marl_planner.common.arguments import *
-from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3, FACMAC
-from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN
+from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3, FACMAC, FOP
+from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN, ContGaussianNet
 from pettingzoo.mpe import simple_spread_v3, simple_v3
 
 def train(args,env,trainer):
@@ -35,7 +35,7 @@ def train(args,env,trainer):
             next_state = env.state()
             global_reward += sum(list(rwd.values()))
 
-            if args.Algorithm in ["VDN","QMIX","FACMAC"]:
+            if args.Algorithm in ["VDN","QMIX","FACMAC","FOP"]:
                 reward = global_reward
             else:
                 reward = rwd
@@ -127,5 +127,8 @@ if __name__=="__main__":
     elif args.Algorithm == "VDN":
         args = get_vdn_args(args)
         trainer = VDN.VDN(args = args)
+    elif args.Algorithm == "FOP":
+        args = get_facmac_args(args)
+        trainer = FOP.FOP(args = args,policy = ContGaussianNet)
 
     train(args,env,trainer)

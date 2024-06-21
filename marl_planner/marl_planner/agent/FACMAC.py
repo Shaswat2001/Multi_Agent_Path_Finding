@@ -89,9 +89,9 @@ class FACMAC:
 
         q_tot = self.Qmixer(state,torch.hstack(q_values))
         actor_loss = -q_tot.mean()
-        self.PolicyOptimizer[agent].zero_grad()
+        self.PolicyOptimizer.zero_grad()
         actor_loss.mean().backward()
-        self.PolicyOptimizer[agent].step()
+        self.PolicyOptimizer.step()
 
         if self.learning_step%self.args.target_update == 0:                
             self.network_soft_updates()
@@ -127,8 +127,8 @@ class FACMAC:
 
             self.policy_parameters += policy.parameters()
 
-        self.QOptimizer = torch.optim.Adam(self.qnet_parameters.parameters(),lr=self.args.critic_lr)
-        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters.parameters(),lr=self.args.actor_lr)
+        self.QOptimizer = torch.optim.Adam(self.qnet_parameters,lr=self.args.critic_lr)
+        self.PolicyOptimizer = torch.optim.Adam(self.policy_parameters,lr=self.args.actor_lr)
         self.network_hard_updates()
 
     def network_hard_updates(self):
@@ -140,7 +140,7 @@ class FACMAC:
     
     def network_soft_updates(self):
         
-        hard_update(self.TargetQmixer,self.Qmixer,self.args.tau)
+        soft_update(self.TargetQmixer,self.Qmixer,self.args.tau)
         for agent in self.args.env_agents:
             soft_update(self.TargetQNetwork[agent],self.Qnetwork[agent],self.args.tau)
             soft_update(self.TargetPolicyNetwork[agent],self.PolicyNetwork[agent],self.args.tau)
