@@ -63,7 +63,7 @@ class COMA:
 
     def learn(self):
         
-        _,observation,action,reward,_,next_observation,done = self.replay_buffer.get_episode()
+        _,observation,action,reward,_,_,done = self.replay_buffer.get_episode()
 
         for ai in range(len(self.args.env_agents)):
             

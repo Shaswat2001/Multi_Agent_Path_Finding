@@ -50,6 +50,7 @@ class MADDPG:
 
             _,observation,action,reward,_,next_observation,done = self.replay_buffer.shuffle()
             agent = self.args.env_agents[ai]
+            obs_i = observation[:,ai*self.obs_shape:(ai+1)*self.obs_shape]
             reward_i = reward[:,ai].view(-1,1)
             done_i = done[:,ai].view(-1,1)
 
@@ -58,13 +59,10 @@ class MADDPG:
             for aj in range(len(self.args.env_agents)):
 
                 agt = self.args.env_agents[aj]
-                obs_i = observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
                 next_obs_i = next_observation[:,aj*self.obs_shape:(aj+1)*self.obs_shape]
 
                 target_critic_action = self.TargetPolicyNetwork[agt](next_obs_i)
-                target_action = self.PolicyNetwork[agt](obs_i)
                 target_action_list.append(target_critic_action)
-                actions_list.append(target_action)
 
             target = self.TargetQNetwork[agent](next_observation,torch.hstack(target_action_list))
             y = reward_i + self.args.gamma*target*(1-done_i)
@@ -73,9 +71,10 @@ class MADDPG:
             self.QOptimizer[agent].zero_grad()
             critic_loss.mean().backward()
             self.QOptimizer[agent].step()
-
+       
             # actions = self.PolicyNetwork(state)
-            critic_value = self.Qnetwork[agent](observation,torch.hstack(actions_list))
+            action[:,ai*self.action_space:(ai+1)*self.action_space] = self.PolicyNetwork[agent](obs_i)
+            critic_value = self.Qnetwork[agent](observation,action)
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.mean().backward()
