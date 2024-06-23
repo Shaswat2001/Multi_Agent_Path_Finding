@@ -12,11 +12,7 @@ class MADDPGCritic(nn.Module):
         n_action = args.n_actions[agent]
 
         self.stateNet = nn.Sequential(
-            nn.Linear(input_shape*n_agents,1024),
-            nn.ReLU(),
-            nn.Linear(1024,512),
-            nn.ReLU(),
-            nn.Linear(512,256),
+            nn.Linear(input_shape*n_agents,256),
             nn.ReLU(),
             nn.Linear(256,128),
             nn.ReLU(),
@@ -28,11 +24,11 @@ class MADDPGCritic(nn.Module):
         )
 
         self.QNet = nn.Sequential(
-            nn.Linear(256,512),
+            nn.Linear(256,128),
             nn.ReLU(),
-            nn.Linear(512,512),
+            nn.Linear(128,128),
             nn.ReLU(),
-            nn.Linear(512,1)
+            nn.Linear(128,1)
         )
 
     def forward(self,state,action):

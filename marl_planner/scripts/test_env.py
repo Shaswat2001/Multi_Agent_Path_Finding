@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from marl_planner.common.arguments import *
 from marl_planner.agent import MADDPG, COMA, MAAC, QMIX, MASoftQ, VDN, MATD3, FACMAC, FOP
 from marl_planner.network.base_net import DiscreteMLP, DiscreteGaussianNet, ContinuousMLP, RNN, ContGaussianNet
-from pettingzoo.mpe import simple_spread_v3, simple_v3
+from pettingzoo.mpe import simple_spread_v3, simple_v3, simple_reference_v3
 
 def train(args,env,trainer):
 
@@ -39,8 +39,8 @@ if __name__=="__main__":
     else:
         args.is_continous = True
 
-    # env = simple_spread_v3.parallel_env(N=2, local_ratio=0.5,continuous_actions=args.is_continous,render_mode="human")
-    env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
+    env = simple_reference_v3.parallel_env(local_ratio=0.5,continuous_actions=args.is_continous,render_mode="human",max_cycles=300)
+    # env = simple_v3.parallel_env(continuous_actions=args.is_continous,render_mode="human",max_cycles=100)
     env.reset()
 
     args = get_env_parameters(args,env)

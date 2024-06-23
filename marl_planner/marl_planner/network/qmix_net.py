@@ -46,7 +46,7 @@ class QMixer(nn.Module):
         b2 = b2.view(-1,1,1)
 
         q_total = torch.bmm(hid_val,W2)+b2
-        q_total = q_total.view(batch_size,-1,1)
+        q_total = q_total.view(batch_size,1)
 
         return q_total
 

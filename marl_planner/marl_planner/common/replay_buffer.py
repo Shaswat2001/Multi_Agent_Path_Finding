@@ -59,7 +59,7 @@ class ReplayBuffer:
         done = []
         for idx in range(index):
 
-            state.append(self.state[idx])
+            state.append(torch.Tensor(self.state[idx]))
             observation.append(torch.hstack([torch.Tensor(obs) for obs in self.observation[idx].values()]))
 
             if self.action_space == "discrete":
@@ -70,9 +70,10 @@ class ReplayBuffer:
             if self.reward_type == "global":
                 reward.append(torch.Tensor([self.reward[idx]]))
             else:
+                print(self.reward[idx])
                 reward.append(torch.hstack([torch.Tensor([rwd]) for rwd in self.reward[idx].values()]))
 
-            next_state.append(self.next_state[idx])
+            next_state.append(torch.Tensor(self.next_state[idx]))
             next_observation.append(torch.hstack([torch.Tensor(nxt_obs) for nxt_obs in self.next_observation[idx].values()]))
             done.append(torch.hstack([torch.Tensor([dn]) for dn in self.done[idx].values()]))
         

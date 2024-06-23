@@ -76,7 +76,7 @@ class COMA:
             distribution_i = self.PolicyNetwork[agent](state_i)
 
             batch_size = len(reward_i)
-            input_critic = self.get_critic_input(ai, state_i, action_i)
+            input_critic = self.get_critic_input(ai, observation, action)
             Q_target = self.TargetQNetwork(input_critic).detach()
 
             action_taken = action_i.type(torch.long).reshape(-1, 1)
@@ -90,7 +90,6 @@ class COMA:
             log_pi = log_softmax(torch.gather(distribution, dim=1, index=action_taken).squeeze() +  1e-10)
 
             actor_loss = -torch.mean(advantage * log_pi)
-
             self.PolicyOptimizer[agent].zero_grad()
             actor_loss.backward()
             # torch.nn.utils.clip_grad_norm_(self.PolicyNetwork[self.args.env_agents[i]].parameters(), 20)

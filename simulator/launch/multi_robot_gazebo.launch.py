@@ -16,6 +16,8 @@
 
 import os
 
+import numpy as np
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler
@@ -72,109 +74,104 @@ def generate_launch_description():
     ld.add_action(gzserver_cmd)
     ld.add_action(gzclient_cmd)
 
-    ROWS = 5
-    COLS = 5
+    ROWS = 3
+    COLS = 3
 
-    x = -ROWS
-    y = -COLS
+    X = np.random.randint(-2,2,size=(3))
+    Y = np.random.randint(-2,2,size=(3))
     last_action = None
 
     # Remapping is required for state publisher otherwise /tf and /tf_static will get be published on root '/' namespace
     remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
 
     # Spawn turtlebot3 instances in gazebo
-    for i in range(COLS):
-        x = -ROWS
-        for j in range(ROWS):
-            # Construct a unique name and namespace
-            name = "turtlebot" + str(i) + "_" + str(j)
-            namespace = "/tb" + str(i) + "_" + str(j)
+    for i in range(3):
+    # for i in range(COLS):
+        x = X[i]
+        y = Y[i]
+        # for j in range(ROWS):
+        # Construct a unique name and namespace
+        name = "turtlebot" + str(i)
+        namespace = "/tb" + str(i)
 
-            # Create state publisher node for that instance
-            turtlebot_state_publisher = Node(
-                package="robot_state_publisher",
-                namespace=namespace,
-                executable="robot_state_publisher",
-                output="screen",
-                parameters=[{"use_sim_time": False,
-                             "publish_frequency": 10.0}],
-                remappings=remappings,
-                arguments=[urdf],
-            )
+        # Create state publisher node for that instance
+        turtlebot_state_publisher = Node(
+            package="robot_state_publisher",
+            namespace=namespace,
+            executable="robot_state_publisher",
+            output="screen",
+            parameters=[{"use_sim_time": False,
+                            "publish_frequency": 10.0}],
+            remappings=remappings,
+            arguments=[urdf],
+        )
 
-            # Create spawn call
-            spawn_turtlebot3_burger = Node(
-                package="gazebo_ros",
-                executable="spawn_entity.py",
-                arguments=[
-                    "-file",
-                    os.path.join(turtlebot3_gazebo_path,"models", "turtlebot3_" + TURTLEBOT3_MODEL, "model.sdf"),
-                    "-entity",
-                    name,
-                    "-robot_namespace",
-                    namespace,
-                    "-x",
-                    str(x),
-                    "-y",
-                    str(y),
-                    "-z",
-                    "0.01",
-                    "-Y",
-                    "3.14159",
-                    "-unpause",
-                ],
-                output="screen",
-            )
+        # Create spawn call
+        spawn_turtlebot3_burger = Node(
+            package="gazebo_ros",
+            executable="spawn_entity.py",
+            arguments=[
+                "-file",
+                os.path.join(turtlebot3_gazebo_path,"models", "turtlebot3_" + TURTLEBOT3_MODEL, "model.sdf"),
+                "-entity",
+                name,
+                "-robot_namespace",
+                namespace,
+                "-x",
+                str(x),
+                "-y",
+                str(y),
+                "-z",
+                "0.01",
+                "-Y",
+                "3.14159",
+                "-unpause",
+            ],
+            output="screen",
+        )
 
-            # Advance by 2 meter in x direction for next robot instantiation
-            x += 2.0
-
-            if last_action is None:
-                # Call add_action directly for the first robot to facilitate chain instantiation via RegisterEventHandler
-                ld.add_action(turtlebot_state_publisher)
-                ld.add_action(spawn_turtlebot3_burger)
-                
-            else:
-                pass
-                # Use RegisterEventHandler to ensure next robot creation happens only after the previous one is completed.
-                # Simply calling ld.add_action for spawn_entity introduces issues due to parallel run.
-                spawn_turtlebot3_event = RegisterEventHandler(
-                    event_handler=OnProcessExit(
-                        target_action=last_action,
-                        on_exit=[spawn_turtlebot3_burger,
-                                 turtlebot_state_publisher],
-                    )
-                )
-                ld.add_action(spawn_turtlebot3_event)
-
-            # Save last instance for next RegisterEventHandler
-            last_action = spawn_turtlebot3_burger
-
-        # Advance by 2 meter in y direction for next robot instantiation
-        y += 2.0
-
-    # Start all driving nodes after the last robot is spawned
-    for i in range(COLS):
-        for j in range(ROWS):
-            namespace = "/tb" + str(i) + "_" + str(j)
-            # Create spawn call
-            drive_turtlebot3_burger = Node(
-                package="turtlebot3_gazebo",
-                executable="turtlebot3_drive",
-                namespace=namespace,
-                output="screen",
-                condition=IfCondition(enable_drive),
-            )
-
+        if last_action is None:
+            # Call add_action directly for the first robot to facilitate chain instantiation via RegisterEventHandler
+            ld.add_action(turtlebot_state_publisher)
+            ld.add_action(spawn_turtlebot3_burger)
+            
+        else:
+            pass
             # Use RegisterEventHandler to ensure next robot creation happens only after the previous one is completed.
             # Simply calling ld.add_action for spawn_entity introduces issues due to parallel run.
-            drive_turtlebot3_event = RegisterEventHandler(
+            spawn_turtlebot3_event = RegisterEventHandler(
                 event_handler=OnProcessExit(
                     target_action=last_action,
-                    on_exit=[drive_turtlebot3_burger],
+                    on_exit=[spawn_turtlebot3_burger,
+                                turtlebot_state_publisher],
                 )
             )
-            
-            ld.add_action(drive_turtlebot3_event)
+            ld.add_action(spawn_turtlebot3_event)
+
+        # Save last instance for next RegisterEventHandler
+        last_action = spawn_turtlebot3_burger
+
+    # Start all driving nodes after the last robot is spawned
+    for i in range(3):
+        namespace = "/tb" + str(i)
+        # Create spawn call
+        drive_turtlebot3_burger = Node(
+            package="turtlebot3_gazebo",
+            executable="turtlebot3_drive",
+            namespace=namespace,
+            output="screen",
+            condition=IfCondition(enable_drive),
+        )
+
+        # Use RegisterEventHandler to ensure next robot creation happens only after the previous one is completed.
+        # Simply calling ld.add_action for spawn_entity introduces issues due to parallel run.
+        drive_turtlebot3_event = RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=last_action,
+                on_exit=[drive_turtlebot3_burger],
+            )
+        )
+        
+        ld.add_action(drive_turtlebot3_event)
 
     return ld

@@ -23,7 +23,7 @@ class ContinuousMLP(nn.Module):
             nn.Linear(128,128),
             nn.ReLU(),
             nn.Linear(128,n_action),
-            nn.Tanh()
+            nn.Sigmoid()
         )
 
     def forward(self,state):

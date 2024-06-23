@@ -66,9 +66,9 @@ class MADDPG:
             target = self.TargetQNetwork[agent](next_observation,torch.hstack(target_action_list))
             y = reward_i + self.args.gamma*target*(1-done_i)
             critic_value = self.Qnetwork[agent](observation,action)
-            critic_loss = torch.mean(torch.square(y.detach() - critic_value),dim=1)
+            critic_loss = torch.mean(torch.square(y.detach() - critic_value))
             self.QOptimizer[agent].zero_grad()
-            critic_loss.mean().backward()
+            critic_loss.backward()
             self.QOptimizer[agent].step()
        
             # actions = self.PolicyNetwork(state)
@@ -76,7 +76,7 @@ class MADDPG:
             critic_value = self.Qnetwork[agent](observation,action)
             actor_loss = -critic_value.mean()
             self.PolicyOptimizer[agent].zero_grad()
-            actor_loss.mean().backward()
+            actor_loss.backward()
             self.PolicyOptimizer[agent].step()
 
         if self.learning_step%self.args.target_update == 0:                
@@ -90,7 +90,7 @@ class MADDPG:
 
         self.replay_buffer = ReplayBuffer(self.args,reward_type="ind",action_space="continuous")
         # Exploration Technique
-        self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.3) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
+        self.noiseOBJ = {agent:OUActionNoise(mean=np.zeros(self.args.n_actions[agent]), std_deviation=float(0.9) * np.ones(self.args.n_actions[agent])) for agent in self.args.env_agents}
         
         self.PolicyNetwork = {agent:self.policy(self.args,agent) for agent in self.args.env_agents}
         self.PolicyOptimizer = {agent:torch.optim.Adam(self.PolicyNetwork[agent].parameters(),lr=self.args.actor_lr) for agent in self.args.env_agents}
