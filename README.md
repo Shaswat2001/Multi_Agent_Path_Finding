@@ -19,6 +19,15 @@ Use ```pip install -r requirements.txt``` to install the requirements.
 ### Quick Start
 
 ```
+mkdir -p ~/marl_ws/src
+cd ~/marl_ws/src
+git clone https://github.com/Shaswat2001/Multi_Agent_Path_Finding.git
+```
+
+Afte that - 
+```
+cd ~/marl_ws
+colcon build
 ros2 run marl_planner main.py
 ```
 
